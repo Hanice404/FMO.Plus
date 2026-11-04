@@ -2489,9 +2489,8 @@ function disconnectAll(notify) {
 $('host').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
 
 (function boot() {
-  const saved = localStorage.getItem('fmo.host');
-  const legacy = '192.168.50.163';                 // 旧默认值，迁移到 fmo.local
-  $('host').value = (saved && saved !== legacy) ? saved : 'fmo.local';
+  // 地址记忆：没有保存过就用设备 mDNS 别名
+  $('host').value = localStorage.getItem('fmo.host') || 'fmo.local';
   App.tab = 'comms';                    // 默认页；链路就绪后会自动加载
   buildConfig();
   renderKV($('kvInfo'), [['状态', '连接后自动加载…']]);
