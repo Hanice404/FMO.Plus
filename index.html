@@ -1,0 +1,2522 @@
+<!DOCTYPE html>
+<html lang="zh" translate="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#070b07">
+<title>FMO.Plus // TACTICAL CONTROL</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23070b07'/%3E%3Crect x='3' y='3' width='26' height='26' fill='none' stroke='%237fd35a' stroke-width='1.6'/%3E%3Cpath d='M10 22V10h9M10 16h7' stroke='%23ffcf57' stroke-width='2.2' fill='none'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#070b07; --panel:#0d130d; --panel2:#111911; --inset:#040803;
+  --line:#25352a; --line-hi:#3d5a41; --grid:#121a12;
+  --fg:#a8f0aa; --fg-dim:#5f9063; --fg-faint:#41603f;
+  --amber:#ffcf57; --warn:#ff9f43; --err:#ff5f4d; --ok:#66e08a; --accent:#7fd35a;
+  --live:#4fe0c8;
+  --mono:"DejaVu Sans Mono","Cascadia Mono",Consolas,"Microsoft YaHei",monospace;
+  --r:0px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  display:flex;flex-direction:column;height:100vh;overflow:hidden;
+  background-color:var(--bg);color:var(--fg);font-family:var(--mono);
+  font-size:14px;line-height:1.45;
+  background-image:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:26px 26px;
+  -webkit-font-smoothing:antialiased;
+}
+/* CRT 扫描线 + 暗角 */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:9000;
+  background:
+    repeating-linear-gradient(0deg,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.16) 2px 3px),
+    radial-gradient(120% 100% at 50% 50%,rgba(0,0,0,0) 55%,rgba(0,0,0,.45) 100%);
+}
+::selection{background:rgba(127,211,90,.28);color:#e8ffe8}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:#050805}
+::-webkit-scrollbar-thumb{background:#2b3f2d;border:1px solid #050805}
+::-webkit-scrollbar-thumb:hover{background:#3d5a41}
+
+/* 单行策略：标签/按钮/表格/数值一律不折行，超长用省略号 */
+.nw{white-space:nowrap}
+.ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- 顶栏 ---------- */
+#topbar{
+  flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:9px 14px;
+  border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0e160e,#080d08);
+  white-space:nowrap;overflow:hidden;
+}
+.logo{color:var(--amber);font-weight:700;letter-spacing:2px;text-shadow:0 0 7px rgba(255,207,87,.35);flex:none}
+.logo b{color:var(--fg)}
+.sub{color:var(--fg-dim);font-size:12px;letter-spacing:1.5px;flex:none}
+.led{display:inline-block;width:9px;height:9px;border-radius:50%;background:#2a3a2a;box-shadow:0 0 0 1px #000;flex:none}
+.led.ok{background:var(--ok);box-shadow:0 0 9px var(--ok)}
+.led.err{background:var(--err);box-shadow:0 0 9px var(--err)}
+.led.warn{background:var(--warn);box-shadow:0 0 9px var(--warn)}
+.led.live{background:var(--live);box-shadow:0 0 9px var(--live);animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.spacer{flex:1 1 auto;min-width:8px}
+
+/* 顶栏状态簇 + 音频开关 */
+.tbmeta{display:flex;align-items:center;gap:7px;flex:none}
+.tbmeta .chip{font-size:11px;letter-spacing:.6px;padding:1px 6px}
+#btnTopAudio{display:inline-flex;align-items:center;gap:6px}
+#btnTopAudio .mic{width:7px;height:7px;border-radius:50%;background:var(--fg-faint);flex:none}
+#btnTopAudio.on{background:#16280f;border-color:var(--accent);color:#d8ffd0}
+#btnTopAudio.on .mic{background:var(--live);box-shadow:0 0 7px var(--live);animation:pulse 1.6s infinite}
+
+input,select,textarea,button{font-family:var(--mono);font-size:13.5px;color:var(--fg)}
+#host{
+  background:var(--inset);border:1px solid var(--line);padding:6px 9px;width:190px;flex:none;
+  transition:border-color .15s,box-shadow .15s;
+}
+#host:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(127,211,90,.16)}
+#host::placeholder{color:var(--fg-faint)}
+button{
+  background:#101c0f;border:1px solid var(--line);padding:6px 12px;cursor:pointer;
+  letter-spacing:1px;transition:background .13s,border-color .13s,color .13s;flex:none;
+  white-space:nowrap;
+}
+button:hover:not(:disabled){background:#1a2d14;border-color:var(--accent);color:#d8ffd0}
+button:active:not(:disabled){background:#0a1408;transform:translateY(1px)}
+button:disabled{opacity:.35;cursor:not-allowed}
+button.primary{border-color:var(--accent);color:#d8ffd0;background:#16260f}
+button.danger{color:var(--err);border-color:#5a2620}
+button.danger:hover:not(:disabled){background:#2a1210;border-color:var(--err)}
+button.mini{padding:4px 9px;font-size:12.5px}
+
+/* ---------- 布局 ---------- */
+#shell{flex:1 1 auto;display:flex;min-height:0}
+nav{
+  flex:0 0 186px;border-right:1px solid var(--line);padding:10px 9px;overflow:auto;
+  background:rgba(6,10,6,.72);
+}
+nav .grp{color:var(--fg-faint);font-size:11px;letter-spacing:2.5px;margin:13px 0 6px;padding-left:4px}
+nav .grp:first-child{margin-top:2px}
+nav button{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;margin-bottom:4px;
+  background:transparent;border:1px solid transparent;letter-spacing:1px;
+}
+nav button .ic{color:var(--fg-faint);flex:none;width:14px;text-align:center}
+nav button:hover .ic{color:var(--accent)}
+nav button.active{background:#16280f;border-color:var(--accent);color:#d8ffd0}
+nav button.active .ic{color:var(--accent);text-shadow:0 0 6px rgba(127,211,90,.6)}
+nav .lbl{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+nav .dot{width:6px;height:6px;border-radius:50%;background:var(--live);box-shadow:0 0 6px var(--live);flex:none;display:none}
+nav button[data-live="1"] .dot{display:inline-block;animation:pulse 1.6s infinite}
+nav button[data-live="1"] .lbl{color:#d8ffd0}
+
+main{flex:1 1 auto;overflow:auto;padding:14px;min-width:0}
+.panel{display:none}
+.panel.active{display:block}
+
+/* ---------- 卡片 ---------- */
+.card{position:relative;border:1px solid var(--line);background:var(--panel);margin-bottom:14px;min-width:0}
+.card::before,.card::after{content:"";position:absolute;width:9px;height:9px;pointer-events:none;opacity:.5}
+.card::before{top:-1px;left:-1px;border-top:2px solid var(--accent);border-left:2px solid var(--accent)}
+.card::after{bottom:-1px;right:-1px;border-bottom:2px solid var(--accent);border-right:2px solid var(--accent)}
+.card>h3{
+  margin:0;padding:8px 12px;background:var(--panel2);border-bottom:1px solid var(--line);
+  color:var(--amber);font-size:13px;font-weight:700;letter-spacing:1.6px;
+  display:flex;align-items:center;gap:9px;white-space:nowrap;overflow:hidden;
+}
+.card>h3 .t{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis}
+.card>h3 .chip{margin-left:auto}
+.card .body{padding:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;min-width:0}
+.grid2>*{min-width:0}
+
+/* ---------- 通用元件 ---------- */
+.row{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;margin-bottom:9px;overflow-x:auto;scrollbar-width:none;min-width:0}
+.row::-webkit-scrollbar{display:none}
+.row:last-child{margin-bottom:0}
+.row>*{flex:none}
+label.fld{color:var(--fg-dim);font-size:12.5px;letter-spacing:.6px;white-space:nowrap}
+.hint{color:var(--fg-faint);font-size:12px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{
+  display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);padding:1px 7px;
+  color:var(--fg-dim);font-size:11.5px;letter-spacing:.8px;white-space:nowrap;
+}
+.chip.ok{color:var(--ok);border-color:#2a5133}
+.chip.warn{color:var(--warn);border-color:#5a4320}
+.chip.err{color:var(--err);border-color:#5a2620}
+.chip.live{color:var(--live);border-color:#1d4f48}
+.chip.amber{color:var(--amber);border-color:#5a4a20}
+
+input,select,textarea{
+  background:var(--inset);border:1px solid var(--line);padding:6px 9px;min-width:0;
+  color:var(--fg);font-family:var(--mono);font-size:13.5px;
+  transition:border-color .15s,box-shadow .15s;
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(127,211,90,.14)}
+input::placeholder,textarea::placeholder{color:var(--fg-faint)}
+textarea{width:100%;background:var(--inset);border:1px solid var(--line);padding:8px;resize:vertical;line-height:1.5}
+
+/* 复选框：方框 + 绿色对勾 */
+input[type=checkbox],input[type=radio]{
+  appearance:none;-webkit-appearance:none;padding:0;width:15px;height:15px;
+  border:1px solid var(--line-hi);background:var(--inset);cursor:pointer;position:relative;flex:none;
+}
+input[type=checkbox]:hover,input[type=radio]:hover{border-color:var(--accent)}
+input[type=radio]{border-radius:50%}
+input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+input[type=checkbox]:checked::after{
+  content:"";position:absolute;left:4px;top:1px;width:5px;height:9px;
+  border-right:2px solid #061206;border-bottom:2px solid #061206;transform:rotate(42deg);
+}
+input[type=radio]:checked{box-shadow:inset 0 0 0 3px var(--accent)}
+
+/* 滑块：暗槽 + 绿色方形滑块 */
+input[type=range]{
+  appearance:none;-webkit-appearance:none;padding:0;border:none;background:transparent;
+  height:20px;cursor:pointer;flex:none;
+}
+input[type=range]::-webkit-slider-runnable-track{
+  height:6px;background:var(--inset);border:1px solid var(--line);
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:11px;height:16px;margin-top:-6px;
+  background:var(--accent);border:1px solid #061206;box-shadow:0 0 7px rgba(127,211,90,.55);
+}
+input[type=range]::-moz-range-track{height:6px;background:var(--inset);border:1px solid var(--line)}
+input[type=range]::-moz-range-thumb{
+  width:11px;height:16px;border-radius:0;background:var(--accent);
+  border:1px solid #061206;box-shadow:0 0 7px rgba(127,211,90,.55);
+}
+input[type=range]:focus{box-shadow:none}
+select{appearance:none;padding-right:26px;background-image:linear-gradient(45deg,transparent 50%,var(--fg-dim) 50%),linear-gradient(135deg,var(--fg-dim) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+select option{background:#0b130b;color:var(--fg)}
+
+/* KV 表 */
+.kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:1px 12px;font-size:13px}
+.kv dt,.kv .k{color:var(--fg-dim);letter-spacing:.4px;white-space:nowrap;padding:3px 0;border-bottom:1px dotted rgba(37,53,42,.55)}
+.kv dd,.kv .v{margin:0;color:var(--fg);padding:3px 0;border-bottom:1px dotted rgba(37,53,42,.55);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.kv .v.strong{font-weight:700;color:#d9ffd0;letter-spacing:.2px}
+
+/* 表格 */
+.tblwrap{overflow:auto;border:1px solid var(--line);background:var(--inset)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border-bottom:1px solid rgba(37,53,42,.75);padding:5px 9px;text-align:left;vertical-align:middle;white-space:nowrap}
+th{background:var(--panel2);color:var(--amber);font-weight:700;letter-spacing:1px;font-size:12px;position:sticky;top:0;z-index:2}
+td{overflow:hidden;text-overflow:ellipsis;max-width:280px}
+tbody tr:nth-child(even){background:rgba(18,26,18,.35)}
+tbody tr:hover{background:rgba(127,211,90,.07)}
+td.num{font-variant-numeric:tabular-nums;color:var(--fg-dim)}
+tr.unread td:first-child{box-shadow:inset 3px 0 0 var(--live)}
+tr.clickable{cursor:pointer}
+
+/* 进度条（分段式） */
+.bar{height:10px;background:var(--inset);border:1px solid var(--line);position:relative;overflow:hidden}
+.bar>i{display:block;height:100%;width:0%;transition:width .25s;
+  background:repeating-linear-gradient(90deg,var(--accent) 0 6px,rgba(127,211,90,.25) 6px 8px)}
+.bar.amber>i{background:repeating-linear-gradient(90deg,var(--amber) 0 6px,rgba(255,207,87,.22) 6px 8px)}
+
+/* 日志 */
+.log{background:var(--inset);height:300px;overflow:auto;border:1px solid var(--line);padding:7px 9px;
+  white-space:pre-wrap;word-break:break-all;font-size:12.5px;line-height:1.5}
+.log .ln{display:block}
+.log .t{color:var(--fg-faint)}
+.log .tx{color:var(--amber)}
+.log .rx{color:var(--ok)}
+.log .er{color:var(--err)}
+.log .sy{color:var(--live)}
+.log .ev{color:var(--live)}
+
+/* Toast / 模态 */
+#toasts{position:fixed;right:14px;bottom:44px;z-index:9500;display:flex;flex-direction:column;gap:7px;max-width:min(440px,calc(100vw - 28px))}
+.toast{
+  border:1px solid var(--line-hi);background:#0b130b;padding:7px 11px;font-size:12.5px;
+  letter-spacing:.4px;box-shadow:0 10px 26px -14px #000;animation:tin .16s ease-out;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.toast.ok{border-color:#2a5133;color:#c8f5cf}
+.toast.err{border-color:#5a2620;color:#ffd0ca}
+.toast.warn{border-color:#5a4320;color:#ffe2bb}
+.toast.info{border-color:#1d4f48;color:#c6f5ee}
+.toast b{color:var(--amber);margin-right:6px}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}}
+
+#modal-root .back{position:fixed;inset:0;background:rgba(3,6,3,.78);z-index:9600;display:grid;place-items:center;padding:16px;animation:tin .14s}
+.modal{width:min(640px,100%);max-height:84vh;overflow:auto;border:1px solid var(--line-hi);background:var(--panel);
+  box-shadow:0 30px 70px -30px #000}
+.modal h3{margin:0;padding:9px 13px;background:var(--panel2);border-bottom:1px solid var(--line);color:var(--amber);
+  font-size:13px;letter-spacing:1.6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.modal .sub{color:var(--fg-dim);font-size:12px;padding:8px 13px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.modal .m-body{padding:12px 13px}
+.modal .m-foot{display:flex;justify-content:flex-end;gap:8px;padding:10px 13px;border-top:1px solid var(--line)}
+
+/* 页脚状态条 */
+footer{
+  flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:6px 14px;border-top:1px solid var(--line);
+  background:#080d08;color:var(--fg-dim);font-size:11.5px;letter-spacing:.9px;white-space:nowrap;overflow:hidden;
+}
+footer .sep{color:var(--line)}
+footer .v{color:var(--fg)}
+footer .gh{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  color:var(--fg-dim);text-decoration:none;transition:color .15s,filter .15s;
+}
+footer .gh:hover{color:var(--accent);filter:drop-shadow(0 0 6px rgba(127,211,90,.55))}
+footer .gh svg{display:block}
+
+/* 音频 */
+canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);background:var(--inset)}
+.meter{height:9px;background:var(--inset);border:1px solid var(--line);overflow:hidden}
+.meter>i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--ok),var(--accent) 70%,var(--amber))}
+
+/* ---------- 响应式：平板 / 窄屏 ---------- */
+@media (min-width: 980px){
+  .grid2{grid-template-columns:1fr 1fr}
+  .grid2 .span2{grid-column:1 / -1}
+}
+@media (min-width: 1400px){
+  main{padding:16px 18px}
+  nav{flex-basis:200px}
+  .grid2{grid-template-columns:1fr 1fr}
+}
+@media (max-width: 900px){
+  #shell{flex-direction:column}
+  nav{
+    flex:0 0 auto;display:flex;gap:5px;overflow-x:auto;overflow-y:hidden;padding:7px 8px;
+    border-right:none;border-bottom:1px solid var(--line);scrollbar-width:none;
+  }
+  nav::-webkit-scrollbar{display:none}
+  nav .grp{display:none}
+  nav button{width:auto;margin-bottom:0;flex:none}
+  nav button .lbl{max-width:120px}
+  .grid2{grid-template-columns:1fr}
+  #topbar{flex-wrap:nowrap;gap:7px;padding:7px 10px}
+  #host{width:auto;flex:1 1 90px;min-width:72px}
+  #topbar>.sub{display:none}
+  #topbar .chip.hide-sm{display:none}
+  main{padding:10px}
+  body{font-size:13.5px}
+}
+@media (max-width: 620px){
+  #topbar{gap:6px;padding:6px 8px}
+  #topbar .logo{font-size:14px;letter-spacing:1px}
+  #topbar .logo b{display:none}
+  #txtLink{display:none}
+  #btnTopAudio .lbl{display:none}
+  #btnTopAudio{padding:6px 9px}
+  #topbar button{padding:6px 8px;font-size:12.5px}
+  .kv{grid-template-columns:110px minmax(0,1fr)}
+  footer{gap:9px;font-size:11px}
+  footer .hide-sm{display:none}
+}
+/* 配置行布局 */
+.cfg-row{display:grid;grid-template-columns:132px minmax(0,1fr) auto;gap:8px;align-items:center;
+  padding:6px 0;border-bottom:1px dotted rgba(37,53,42,.5)}
+.cfg-row>label{color:var(--fg-dim);font-size:12.5px;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cfg-row .ctl{display:flex;gap:6px;align-items:center;flex:none}
+.cfg-row input,.cfg-row select,.cfg-row textarea{width:100%;min-width:0}
+.cfg-row .note{grid-column:1/-1;color:var(--fg-faint);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cfg-row textarea{rows:2;min-height:34px;resize:vertical}
+@media (max-width:620px){
+  .cfg-row{grid-template-columns:96px minmax(0,1fr)}
+  .cfg-row .ctl{grid-column:1/-1;justify-content:flex-end}
+}
+</style>
+</head>
+<body>
+
+<header id="topbar">
+  <span class="logo">▣ FMO.Plus<b> // TACTICAL</b></span>
+  <span class="sub">CONTROL UNIT</span>
+  <span class="spacer"></span>
+  <span class="tbmeta">
+    <span id="ledLink" class="led"></span>
+    <span id="txtLink" class="sub" style="min-width:58px">OFFLINE</span>
+    <span class="chip hide-sm" id="tbLat" title="最近一次请求往返">—</span>
+    <span class="chip hide-sm" id="tbEv" title="实时通道收帧数">EV —</span>
+  </span>
+  <button id="btnTopAudio" title="音频流开关"><span class="mic"></span><span class="lbl">音频</span></button>
+  <input id="host" placeholder="fmo.local" autocomplete="off" spellcheck="false">
+  <button id="btnConn" class="primary">连接</button>
+  <button id="btnDisc" class="danger">断开</button>
+</header>
+
+<div id="shell">
+  <nav id="tabs">
+    <div class="grp">作战</div>
+    <button data-tab="comms" class="active"><span class="ic">◎</span><span class="lbl">通信</span></button>
+    <button data-tab="station"><span class="ic">⌖</span><span class="lbl">电台</span></button>
+    <button data-tab="qso"><span class="ic">⚑</span><span class="lbl">通联日志</span></button>
+    <button data-tab="msg" data-live="0" title="收到新短消息时点亮"><span class="ic">✉</span><span class="lbl">消息</span><span class="dot"></span></button>
+    <button data-tab="events" data-live="0" title="有新活动/公告时点亮"><span class="ic">✺</span><span class="lbl">事件</span><span class="dot"></span></button>
+    <div class="grp">系统</div>
+    <button data-tab="config"><span class="ic">⚙</span><span class="lbl">配置</span></button>
+    <button data-tab="wifi"><span class="ic">⌁</span><span class="lbl">无线</span></button>
+    <button data-tab="upgrade" data-live="0" title="升级进行中点亮"><span class="ic">⇅</span><span class="lbl">升级</span><span class="dot"></span></button>
+    <button data-tab="log"><span class="ic">▤</span><span class="lbl">原始日志</span></button>
+  </nav>
+
+  <main>
+    <!-- ============ 通信 ============ -->
+    <section class="panel active" id="p-comms">
+      <div class="grid2">
+        <div class="card">
+          <h3><span class="led ok"></span><span class="t">设备身份 // user.getInfo</span><span class="chip" id="chipInfo">待命</span></h3>
+          <div class="body">
+            <div class="row">
+              <button id="btnInfo" class="primary">拉取身份</button>
+              <button id="btnCopyCert" class="mini">复制指纹</button>
+              <span class="hint">呼号 / UID / 角色 / 证书 / MQTT</span>
+            </div>
+            <dl class="kv" id="kvInfo"></dl>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><span class="led" id="ledLive"></span><span class="t">实时通道 // /events</span><span class="chip" id="chipLive">未连接</span></h3>
+          <div class="body">
+            <dl class="kv" id="kvLive">
+              <dt class="k">状态</dt><dd class="v">—</dd>
+              <dt class="k">收帧</dt><dd class="v">0</dd>
+              <dt class="k">当前通联</dt><dd class="v">—</dd>
+              <dt class="k">最近事件</dt><dd class="v">—</dd>
+            </dl>
+            <div class="row" style="margin-top:9px">
+              <button id="btnHistory" class="mini">拉取讲话历史</button>
+              <span class="hint">qso/triggerPushHistory → /events 推送</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><span class="t">屏幕模式 // ui</span><span class="chip" id="chipScr">—</span></h3>
+          <div class="body">
+            <div class="row">
+              <label class="fld">模式</label>
+              <select id="scrMode"><option value="0">0 · 默认</option><option value="1">1</option><option value="2">2</option></select>
+              <button id="btnScrGet" class="mini">读取</button>
+              <button id="btnScrSet" class="mini">设置</button>
+            </div>
+            <div class="hint">ui.getScreenMode / ui.setScreenMode</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><span class="t">链路诊断</span><span class="chip" id="chipDiag">—</span></h3>
+          <div class="body">
+            <dl class="kv" id="kvDiag"></dl>
+            <div class="row" style="margin-top:9px">
+              <button id="btnPing" class="mini">测延迟</button>
+              <button id="btnDiagAll" class="mini">全面自检</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 无线 ============ -->
+    <section class="panel" id="p-wifi">
+      <div class="card">
+        <h3><span class="led ok"></span><span class="t">当前链路 // wifi.getWifi</span><span class="chip" id="chipWifiCur">—</span></h3>
+        <div class="body">
+          <dl class="kv" id="kvWifiCur"></dl>
+          <div class="row" style="margin-top:9px">
+            <button id="btnWifiReload" class="mini">刷新</button>
+            <button id="btnWifiDisc" class="mini danger">断开当前 WiFi</button>
+            <span class="hint">断开后本机将失去到设备的网络，需用 AP 热点恢复</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><span class="t">频谱扫描 // wifi.scanWifi → scanWifiResult</span><span class="chip" id="chipScan">待命</span></h3>
+        <div class="body">
+          <div class="row">
+            <button id="btnScan" class="primary">开始扫描</button>
+            <button id="btnScanStop" class="mini">中止</button>
+            <span class="hint" id="scanHint">设备侧一次扫描约 15–25 秒</span>
+          </div>
+          <div class="bar" style="margin-bottom:10px"><i id="scanBar"></i></div>
+          <div class="tblwrap">
+            <table id="tblWifi">
+              <thead><tr><th style="width:44px">#</th><th>SSID</th><th style="width:74px">加密</th><th style="width:86px">信号</th><th style="width:132px">状态</th><th style="width:180px">操作</th></tr></thead>
+              <tbody><tr><td colspan="6" class="hint">尚未扫描</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><span class="t">手动保存网络 // wifi.saveWifi</span><span class="chip" id="chipSave">—</span></h3>
+        <div class="body">
+          <div class="row">
+            <label class="fld">SSID</label><input id="wSsid" placeholder="网络名称" style="width:200px" maxlength="32">
+            <label class="fld">密码</label><input id="wPass" type="password" placeholder="留空=开放网络" style="width:200px" maxlength="63">
+            <button id="btnWifiSave" class="primary mini">保存</button>
+          </div>
+          <div class="hint">SSID ≤32 字符；密码为空或 8–63 位</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 通联 ============ -->
+    <section class="panel" id="p-qso">
+      <div class="card">
+        <h3><span class="led ok"></span><span class="t">通联台账 // qso.getList</span><span class="chip" id="chipQso">—</span></h3>
+        <div class="body">
+          <div class="row">
+            <button id="btnQsoList" class="primary mini">获取列表</button>
+            <button id="btnQsoPrev" class="mini">‹ 上页</button>
+            <button id="btnQsoNext" class="mini">下页 ›</button>
+            <span class="chip" id="qsoPage">第 1 页</span>
+            <span class="hint">点行看详情</span>
+          </div>
+          <div class="tblwrap" style="max-height:340px">
+            <table id="tblQso">
+              <thead><tr><th style="width:64px">#</th><th style="width:150px">时间</th><th>对方呼号</th><th style="width:100px">网格</th><th style="width:64px"></th></tr></thead>
+              <tbody><tr><td colspan="5" class="hint">尚未加载</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3><span class="t">完整性与备份</span></h3>
+          <div class="body">
+            <div class="row">
+              <button id="btnQsoSign" class="mini">生成签名</button>
+              <button id="btnQsoPub" class="mini">读取公钥</button>
+              <button id="btnQsoReset" class="mini danger">重置密钥对</button>
+            </div>
+            <div class="row">
+              <button id="btnQsoBackup" class="mini">备份 zip</button>
+              <button id="btnQsoAdif" class="mini">导出 ADIF</button>
+              <button id="btnQsoClear" class="mini danger">清空全部</button>
+            </div>
+            <div class="bar amber" style="margin-top:6px"><i id="qsoBar"></i></div>
+            <div class="hint" id="qsoProgHint" style="margin-top:5px">进度来自 /events qso/progress</div>
+            <div class="row" id="qsoDlRow" style="margin-top:7px;display:none">
+              <a id="qsoDl" class="chip live" href="#" target="_blank" rel="noopener">下载文件</a>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3><span class="t">签名 / 公钥输出</span><span class="chip" id="chipKey">—</span></h3>
+          <div class="body">
+            <textarea id="qsoKeyOut" rows="6" readonly placeholder="签名或公钥…"></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 消息 ============ -->
+    <section class="panel" id="p-msg">
+      <div class="grid2">
+        <div class="card">
+          <h3><span class="led ok"></span><span class="t">收件箱 // message.getList</span><span class="chip" id="chipMsg">—</span></h3>
+          <div class="body">
+            <div class="row">
+              <button id="btnMsgList" class="primary mini">刷新</button>
+              <button id="btnMsgMore" class="mini">更多</button>
+              <button id="btnMsgDelAll" class="mini danger">删除全部</button>
+            </div>
+            <div class="tblwrap" style="max-height:300px">
+              <table id="tblMsg">
+                <thead><tr><th style="width:56px">#</th><th>来自</th><th style="width:132px">时间</th><th style="width:60px">状态</th></tr></thead>
+                <tbody><tr><td colspan="4" class="hint">尚未加载</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><span class="t">消息详情 / 发送</span><span class="chip" id="chipMsgDetail">—</span></h3>
+          <div class="body">
+            <dl class="kv" id="kvMsg"></dl>
+            <div class="row" style="margin-top:9px">
+              <label class="fld">呼号</label><input id="msgTo" placeholder="BG5XXX" style="width:104px" maxlength="15">
+              <label class="fld">SSID</label><input id="msgSsid" value="0" style="width:52px" maxlength="2">
+              <button id="btnMsgSend" class="primary mini">发送</button>
+            </div>
+            <div class="row">
+              <input id="msgText" placeholder="内容 ≤60 字节" style="flex:1 1 auto;min-width:120px">
+            </div>
+            <div class="row">
+              <button id="btnMsgRead" class="mini">标记已读</button>
+              <button id="btnMsgDel" class="mini danger">删除本条</button>
+              <span class="chip" id="chipAck">无回执</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 电台（顶部：实时音频） ============ -->
+    <section class="panel" id="p-station">
+      <div class="card">
+        <h3><span class="led" id="ledAudio"></span><span class="t">实时音频流 // ws://host/audio</span><span class="chip" id="chipAudio">待命</span></h3>
+        <div class="body">
+          <div class="row">
+            <button id="btnAudioStart" class="primary mini">▶ 连接</button>
+            <button id="btnAudioStop" class="mini danger">■ 停止</button>
+            <label class="fld">音量</label>
+            <input id="audioVol" type="range" min="0" max="100" value="70" style="width:120px;flex:none">
+            <span class="chip" id="audioVolTxt">70%</span>
+          </div>
+          <div class="meter" style="margin:2px 0 8px"><i id="audioMeter"></i></div>
+          <canvas id="viz"></canvas>
+          <dl class="kv" id="kvAudio" style="margin-top:9px"></dl>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="led ok"></span><span class="t">当前电台 // station.getCurrent</span><span class="chip" id="chipStCur">—</span></h3>
+        <div class="body">
+          <dl class="kv" id="kvStCur"></dl>
+          <div class="row" style="margin-top:9px">
+            <button id="btnStGet" class="mini">读取</button>
+            <button id="btnStPrev" class="mini">◂ 上一个</button>
+            <button id="btnStNext" class="mini">下一个 ▸</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><span class="t">电台列表</span>
+          <span class="chip" id="chipStList">—</span></h3>
+        <div class="body">
+          <div class="row">
+            <button data-stlist="getListRange" class="mini primary">全部</button>
+            <button data-stlist="getPinnedList" class="mini" title="已收藏的台站">收藏</button>
+            <button data-stlist="getActiveList" class="mini">活跃</button>
+            <label class="fld">每页</label>
+            <select id="stPageSize" style="width:74px" title="设备单次最多稳定返回 20 条">
+              <option value="8">8</option>
+              <option value="12">12</option>
+              <option value="20" selected>20</option>
+            </select>
+            <button id="btnStPrevPage" class="mini" title="上一页">‹</button>
+            <button id="btnStNextPage" class="mini" title="下一页">›</button>
+            <span class="chip" id="stPage">1</span>
+          </div>
+          <div class="tblwrap" style="max-height:320px">
+            <table id="tblSt">
+              <thead><tr><th style="width:76px">UID</th><th>名称</th><th style="width:96px"></th></tr></thead>
+              <tbody><tr><td colspan="3" class="hint">尚未加载</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><span class="t">导入原始报文 // station.importRawPacket</span><span class="chip" id="chipImport">—</span></h3>
+        <div class="body">
+          <textarea id="stRaw" rows="3" placeholder="BG5XXX>APRS,TCPIP*:!3112.00N/12121.00EzFMO.Plus"></textarea>
+          <div class="row" style="margin-top:8px">
+            <button id="btnStImport" class="primary mini">导入</button>
+            <span class="hint">结果同时来自响应与 /events station/import</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 事件 ============ -->
+    <section class="panel" id="p-events">
+      <div class="grid2">
+        <div class="card">
+          <h3><span class="led ok"></span><span class="t">事件流 // event.getList</span><span class="chip" id="chipEv">—</span></h3>
+          <div class="body">
+            <div class="row">
+              <button id="btnEvList" class="primary mini">刷新</button>
+              <button id="btnEvMore" class="mini">+20</button>
+              <button id="btnEvDelAll" class="mini danger">清空</button>
+            </div>
+            <div class="tblwrap" style="max-height:320px">
+              <table id="tblEv">
+                <thead><tr><th style="width:52px">#</th><th>标题</th><th style="width:96px">来源</th><th style="width:120px">时间</th></tr></thead>
+                <tbody><tr><td colspan="4" class="hint">尚未加载</td></tr></tbody>
+              </table>
+            </div>
+            <div class="hint" style="margin-top:6px">点行查看正文</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><span class="t">发布 / 黑名单</span><span class="chip" id="chipBlk">—</span></h3>
+          <div class="body">
+            <div class="row">
+              <label class="fld">主题</label><input id="evTopic" style="flex:1 1 auto;min-width:80px" maxlength="32" placeholder="≤32 字节">
+            </div>
+            <div class="row">
+              <label class="fld">内容</label><input id="evContent" style="flex:1 1 auto;min-width:120px" maxlength="140" placeholder="≤140 字节">
+              <button id="btnEvPub" class="mini primary">发布</button>
+            </div>
+            <div class="row">
+              <button id="btnBlkList" class="mini">黑名单用户</button>
+              <label class="fld">解封 UID</label><input id="blkUid" style="width:90px" maxlength="8">
+              <button id="btnBlkUnblock" class="mini">解封</button>
+            </div>
+            <div class="hint">发布需在自有服务器且 24h 内仅一次；黑名单接口部分固件未实现</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 配置 ============ -->
+    <section class="panel" id="p-config">
+      <div class="card">
+        <h3><span class="led ok"></span><span class="t">配置寄存器 // config.get* / set*</span><span class="chip" id="chipCfg">未加载</span></h3>
+        <div class="body">
+          <div class="row">
+            <button id="btnCfgAll" class="primary mini">读取全部</button>
+            <button id="btnCfgRestart" class="mini">重启 APRS 服务</button>
+            <button id="btnCfgBroadcastSrv" class="mini">广播服务器</button>
+            <button id="btnCfgBroadcastUser" class="mini">广播用户</button>
+            <span class="hint">APRS 相关改动需重启服务生效</span>
+          </div>
+        </div>
+      </div>
+      <div id="cfgGroups"></div>
+    </section>
+
+    <!-- ============ 升级 ============ -->
+    <section class="panel" id="p-upgrade">
+      <div class="grid2">
+        <div class="card">
+          <h3><span class="led" id="ledOta"></span><span class="t">固件通道 // config.queryUpgrade*</span><span class="chip" id="chipOta">待命</span></h3>
+          <div class="body">
+            <div class="row">
+              <label class="fld">通道</label>
+              <select id="upChannel">
+                <option value="queryUpgradeStable">稳定版 Stable</option>
+                <option value="queryUpgradeInside">内测版 Inside</option>
+                <option value="queryUpgradeCanary">金丝雀 Canary</option>
+              </select>
+              <button id="btnUpCheck" class="primary mini">检查更新</button>
+              <button id="btnUpRuntime" class="mini">运行信息</button>
+            </div>
+            <dl class="kv" id="kvUp"></dl>
+            <div class="bar amber" style="margin-top:8px"><i id="otaBar"></i></div>
+            <div class="hint" id="otaHint" style="margin-top:5px">进度来自 /events ota/progress</div>
+            <div class="row" style="margin-top:9px">
+              <button id="btnUpStart" class="mini danger" disabled>启动升级</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><span class="t">系统操作</span><span class="chip err">高危</span></h3>
+          <div class="body">
+            <dl class="kv">
+              <dt class="k">重启系统</dt><dd class="v">设备重启，约 20–30 秒恢复</dd>
+              <dt class="k">系统重置</dt><dd class="v">擦除配置与日志，不可撤销</dd>
+            </dl>
+            <div class="row" style="margin-top:9px">
+              <button id="btnReboot" class="mini danger">重启系统</button>
+              <button id="btnReset" class="mini danger">系统重置</button>
+            </div>
+            <div class="hint">两者均为 fire-and-forget，设备可能直接断链</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 日志 ============ -->
+    <section class="panel" id="p-log">
+      <div class="card">
+        <h3><span class="t">原始协议日志</span><span class="chip" id="chipLog">0</span></h3>
+        <div class="body">
+          <div class="row">
+            <input id="logFilter" placeholder="过滤 type（如 config / wifi / event）" style="width:230px">
+            <label class="fld" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input id="logPause" type="checkbox"> 暂停</label>
+            <button id="btnLogClear" class="mini">清空</button>
+            <button id="btnLogDump" class="mini">导出 .log</button>
+          </div>
+          <div id="rawLog" class="log"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><span class="t">手动下发 // 原始请求</span><span class="chip" id="chipManual">—</span></h3>
+        <div class="body">
+          <div class="row">
+            <input id="mType" value="config" style="width:100px" placeholder="type">
+            <input id="mSub" value="getRole" style="width:190px" placeholder="subType">
+            <input id="mData" value="{}" style="flex:1 1 auto;min-width:120px" placeholder="data JSON">
+            <button id="btnManual" class="primary mini">发送</button>
+          </div>
+          <textarea id="mOut" rows="5" readonly placeholder="响应…"></textarea>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <span>▣ FMO.Plus</span>
+  <span class="sep">|</span>
+  <span>链路 <b class="v" id="fLink">OFFLINE</b></span>
+  <span class="sep">|</span>
+  <span>延迟 <b class="v" id="fLat">—</b></span>
+  <span class="sep">|</span>
+  <span class="hide-sm">队列 <b class="v" id="fQueue">0</b></span>
+  <span class="sep hide-sm">|</span>
+  <span class="hide-sm">事件帧 <b class="v" id="fEv">0</b></span>
+  <span class="spacer"></span>
+  <a id="ghLink" class="gh" href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+  </a>
+  <span id="fClock" class="v">--:--:--</span>
+</footer>
+
+<div id="toasts"></div>
+<div id="modal-root"></div>
+
+<script>
+"use strict";
+/* =========================================================================
+   FMO // TACTICAL CONTROL — 单文件控制台
+   链路：ws://<host>/ws（严格串行的请求-响应） + ws://<host>/events（只推不收）
+   ========================================================================= */
+
+/* ------------------------------------------------------------ 基础工具 */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad2 = (n) => String(n).padStart(2, '0');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const bytesOf = (s) => new TextEncoder().encode(String(s || '')).length;
+
+function fmtTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  if (isNaN(d.getTime())) return '—';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function fmtAgo(ts) {
+  if (!ts) return '';
+  const s = Math.floor(Date.now() / 1000 - ts);
+  if (s < 60) return '刚刚';
+  if (s < 3600) return `${Math.floor(s / 60)}m 前`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h 前`;
+  return `${Math.floor(s / 86400)}d 前`;
+}
+
+/* ------------------------------------------------------------ 提示 / 弹窗 */
+function toast(kind, title, msg, ttl) {
+  const box = $('toasts');
+  const d = document.createElement('div');
+  d.className = 'toast ' + kind;
+  d.innerHTML = `<b>${kind === 'ok' ? '[OK]' : kind === 'err' ? '[ERR]' : kind === 'warn' ? '[WARN]' : '[..]'}</b>` +
+    esc(title) + (msg ? ' · ' + esc(msg) : '');
+  d.title = title + (msg ? ' · ' + msg : '');
+  box.appendChild(d);
+  const close = () => { d.style.opacity = '0'; setTimeout(() => d.remove(), 160); };
+  d.onclick = close;
+  setTimeout(close, ttl || (kind === 'err' ? 7000 : 3600));
+}
+
+function modal(opts) {
+  const root = $('modal-root');
+  const back = document.createElement('div');
+  back.className = 'back';
+  const box = document.createElement('div');
+  box.className = 'modal';
+  box.innerHTML = `<h3>${esc(opts.title || '')}</h3>` +
+    (opts.sub ? `<div class="sub">${esc(opts.sub)}</div>` : '') +
+    `<div class="m-body"></div><div class="m-foot"></div>`;
+  const body = box.querySelector('.m-body');
+  const foot = box.querySelector('.m-foot');
+  if (typeof opts.body === 'string') body.innerHTML = opts.body;
+  else if (opts.body) body.appendChild(opts.body);
+  const close = () => back.remove();
+  (opts.actions || [{ label: '关闭' }]).forEach((a) => {
+    const b = document.createElement('button');
+    b.className = a.kind || '';
+    b.textContent = a.label;
+    b.onclick = async () => {
+      if (!a.onClick) return close();
+      b.disabled = true;
+      try { const r = await a.onClick({ close, body }); if (r !== false) close(); }
+      finally { b.disabled = false; }
+    };
+    foot.appendChild(b);
+  });
+  back.appendChild(box);
+  back.onmousedown = (e) => { if (e.target === back) close(); };
+  box.onkeydown = (e) => { if (e.key === 'Escape') close(); };
+  root.appendChild(back);
+  const first = box.querySelector('input,textarea,select');
+  if (first) setTimeout(() => first.focus(), 30);
+  return { close, box, body };
+}
+
+/** 危险操作：需键入确认词 */
+function confirmWord(title, sub, word, onOk) {
+  modal({
+    title, sub,
+    body: `<div class="row"><label class="fld">确认词</label>
+      <input id="cfw" placeholder="${esc(word)}" style="flex:1 1 auto;min-width:100px" autocomplete="off"></div>
+      <div class="hint" style="margin-top:6px">输入 <b style="color:var(--err)">${esc(word)}</b> 后执行，不可撤销</div>`,
+    actions: [
+      { label: '取消' },
+      {
+        label: '确认执行', kind: 'danger',
+        onClick: ({ close, body }) => {
+          const v = (body.querySelector('#cfw') || {}).value || '';
+          if (v.trim().toUpperCase() !== word.toUpperCase()) { toast('warn', '确认词不匹配', '已取消'); return false; }
+          close();
+          onOk();
+        },
+      },
+    ],
+  });
+}
+
+/* ------------------------------------------------------------ 原始日志 */
+const LOG = {
+  lines: 0, paused: false,
+  add(kind, text) {
+    if (this.paused) return;
+    const filt = ($('logFilter').value || '').trim().toLowerCase();
+    if (filt && String(text).toLowerCase().indexOf(filt) < 0) return;
+    const el = $('rawLog');
+    const t = new Date();
+    const row = document.createElement('span');
+    row.className = 'ln';
+    row.innerHTML = `<span class="t">${pad2(t.getHours())}:${pad2(t.getMinutes())}:${pad2(t.getSeconds())}</span> ` +
+      `<span class="${kind}">${kind === 'tx' ? '▸' : kind === 'rx' ? '◂' : kind === 'er' ? '!' : '·'}</span> ${esc(text)}`;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+    el.appendChild(row);
+    this.lines++;
+    while (el.children.length > 800) el.removeChild(el.firstChild);
+    if (atBottom) el.scrollTop = el.scrollHeight;
+    $('chipLog').textContent = this.lines + ' 行';
+  },
+  clear() { $('rawLog').innerHTML = ''; this.lines = 0; $('chipLog').textContent = '0 行'; },
+  dump() {
+    const text = Array.from($('rawLog').children).map((n) => n.textContent).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    a.download = `fmo-log-${Date.now()}.log`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  },
+};
+
+/* ------------------------------------------------------------ 事件总线 */
+const bus = (() => {
+  const m = new Map();
+  return {
+    on(ev, cb) { if (!m.has(ev)) m.set(ev, new Set()); m.get(ev).add(cb); },
+    emit(ev, d) { (m.get(ev) || []).forEach((cb) => { try { cb(d); } catch (e) { console.error(e); } }); },
+  };
+})();
+
+/* ------------------------------------------------------------ 链路客户端 */
+const App = { host: '', role: null, info: null, scanning: false, scanAbort: false };
+
+const Link = {
+  ws: null, state: 'idle', queue: [], inflight: null,
+  lastLat: null, lastCode: undefined, retryDelay: 1000, manual: false,
+
+  isOpen() { return this.ws && this.ws.readyState === 1; },
+
+  connect(host) {
+    this.host = host;
+    this.manual = false;
+    if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { } }
+    this.state = 'connecting';
+    paintLink();
+    let ws;
+    try { ws = new WebSocket('ws://' + host + '/ws'); }
+    catch (e) { this.state = 'error'; paintLink(); toast('err', '地址无效', String(e.message || e)); return; }
+    this.ws = ws;
+    ws.onopen = () => {
+      this.state = 'open'; this.retryDelay = 1000;
+      LOG.add('sy', `[open] ${host}`);
+      paintLink(); bus.emit('open');
+      this._pump();
+    };
+    ws.onclose = () => {
+      this.state = 'closed';
+      this._fail('链路断开');
+      paintLink(); bus.emit('close');
+      if (this.manual) { LOG.add('sy', '[close] 手动断开，不再重连'); return; }
+      LOG.add('er', '[close] 3s 后重连');
+      setTimeout(() => { if (!this.isOpen() && !this.manual) this.connect(this.host); }, 3000);
+    };
+    ws.onerror = () => { LOG.add('er', '[error] 套接字错误'); };
+    ws.onmessage = (ev) => {
+      let msg; try { msg = JSON.parse(ev.data); } catch (e) { LOG.add('rx', ev.data); return; }
+      this._onMessage(msg);
+    };
+  },
+
+  disconnect() {
+    this.manual = true;
+    this.state = 'manual';
+    if (this.ws) { try { this.ws.close(); } catch (e) { } }
+    this.ws = null;
+    paintLink();
+  },
+
+  _fail(why) {
+    const q = this.inflight;
+    if (q) { clearTimeout(q.timer); this.inflight = null; q.reject(new Error(why)); }
+    while (this.queue.length) this.queue.shift().reject(new Error(why));
+    paintQueue();
+  },
+
+  request(type, subType, data, opts) {
+    const isRead = /^get/i.test(subType);
+    const o = Object.assign({ timeout: 0, expect: null, retry: null }, opts || {});
+    if (o.retry == null) o.retry = isRead ? 1 : 0;      // 读操作自动补一次（设备忙时会丢请求）
+    if (!o.timeout) o.timeout = isRead ? 4500 : 6000;
+    if (!this.isOpen()) {
+      if (!this.manual && this.state !== 'connecting' && this.host) {
+        setTimeout(() => { if (!this.isOpen() && !this.manual) this.connect(this.host); }, 0);
+      }
+      return Promise.reject(new Error('链路断开（正在重连）'));
+    }
+    return new Promise((resolve, reject) => {
+      this.queue.push({
+        type, subType, data: data || {}, expect: o.expect, timeout: o.timeout,
+        retries: o.retry, resolve, reject,
+      });
+      paintQueue();
+      this._pump();
+    });
+  },
+
+  fire(type, subType, data) {
+    if (!this.isOpen()) return false;
+    const raw = JSON.stringify({ type, subType, data: data || {} });
+    LOG.add('tx', raw);
+    try { this.ws.send(raw); return true; } catch (e) { return false; }
+  },
+
+  _pump() {
+    paintQueue();
+    if (this.inflight || !this.isOpen() || !this.queue.length) return;
+    const q = this.queue.shift();
+    this.inflight = q;
+    q.raw = JSON.stringify({ type: q.type, subType: q.subType, data: q.data });
+    q.t0 = performance.now();
+    q.timer = setTimeout(() => {
+      if (this.inflight !== q) return;
+      this.inflight = null;
+      if (q.retries > 0) {           // 读操作：设备忙时会被丢弃，自动补一次
+        q.retries--;
+        LOG.add('sy', `[retry] ${q.type}/${q.subType}`);
+        this.queue.unshift(q);
+        paintQueue();
+        this._pump();
+        return;
+      }
+      q.reject(new Error('超时（设备未响应）'));
+      paintQueue();
+      this._pump();
+    }, q.timeout);
+    LOG.add('tx', q.raw);
+    paintQueue();
+    try { this.ws.send(q.raw); }
+    catch (e) { clearTimeout(q.timer); this.inflight = null; q.reject(e); this._pump(); }
+  },
+
+  _onMessage(msg) {
+    LOG.add('rx', JSON.stringify(msg));
+    const q = this.inflight;
+    if (q && msg.type === q.type && msg.subType === (q.expect || q.subType + 'Response')) {
+      this.inflight = null;
+      clearTimeout(q.timer);
+      this.lastLat = Math.round(performance.now() - q.t0);
+      this.lastCode = msg.code;
+      q.resolve(msg.data || {}, msg);
+      paintLink(); paintQueue();
+      this._pump();
+    }
+    bus.emit('msg', msg);
+  },
+};
+
+/* ------------------------------------------------------------ 实时通道 */
+const Live = {
+  ws: null, frames: 0, retry: 0, timer: null,
+  connect(host) {
+    this.close(true);
+    let ws;
+    try { ws = new WebSocket('ws://' + host + '/events'); } catch (e) { return; }
+    this.ws = ws;
+    ws.onopen = () => {
+      this.retry = 0;
+      LOG.add('sy', '[events] 已连接');
+      paintLive('open');
+    };
+    ws.onmessage = (ev) => {
+      this.frames++;
+      $('fEv').textContent = this.frames;
+      const tb = $('tbEv');
+      if (tb) tb.textContent = 'EV ' + this.frames;
+      let m; try { m = JSON.parse(ev.data); } catch (e) { LOG.add('ev', ev.data); return; }
+      const meta = [m.level, m.src, m.seq != null ? '#' + m.seq : ''].filter(Boolean).join(' ');
+      LOG.add('ev', `[events${meta ? ' ' + meta : ''}] ${JSON.stringify(m.data)}`);
+      bus.emit('live', m);
+    };
+    ws.onclose = () => {
+      paintLive('closed');
+      if (this.manual) return;
+      this.retry = Math.min(this.retry + 1, 5);
+      clearTimeout(this.timer);
+      const delay = Math.min(500 * Math.pow(2, this.retry - 1), 8000);
+      this.timer = setTimeout(() => this.connect(this.host), delay);
+    };
+    ws.onerror = () => { LOG.add('sy', '[events] 等待设备（将自动重试）'); };
+  },
+  close(keepFlag) {
+    this.manual = !keepFlag;
+    clearTimeout(this.timer);
+    if (this.ws) { try { this.ws.onclose = null; this.ws.close(); } catch (e) { } this.ws = null; }
+    paintLive('idle');
+  },
+};
+
+/* ------------------------------------------------------------ 顶栏/页脚绘制 */
+function paintLink() {
+  const led = $('ledLink'), txt = $('txtLink');
+  const map = {
+    open: ['led ok', 'LINK OK', '已连接'],
+    connecting: ['led warn', 'CONNECT…', '连接中'],
+    closed: ['led err', 'LINK LOST', '已断开'],
+    error: ['led err', 'LINK ERR', '错误'],
+    manual: ['led', 'OFFLINE', '未连接'],
+    idle: ['led', 'OFFLINE', '未连接'],
+  };
+  const [cls, foot, chipText] = map[Link.state] || map.idle;
+  led.className = cls;
+  txt.textContent = Link.isOpen() ? 'LINK OK' : (Link.state === 'connecting' ? 'CONNECT…' : 'OFFLINE');
+  $('fLink').textContent = foot;
+  $('fLat').textContent = Link.lastLat != null ? Link.lastLat + 'ms' : '—';
+  const lat = $('tbLat');
+  if (lat) {
+    lat.textContent = Link.lastLat != null ? Link.lastLat + 'ms' : '—';
+    lat.className = 'chip hide-sm' + (Link.lastLat != null && Link.lastLat < 300 ? ' ok' : '');
+  }
+  $('btnConn').classList.toggle('primary', !Link.isOpen());
+  $('btnConn').disabled = Link.state === 'connecting';
+  if (Link.isOpen() && App.host) txt.title = App.host;
+  else txt.title = chipText;
+}
+function paintQueue() {
+  const n = Link.queue.length + (Link.inflight ? 1 : 0);
+  $('fQueue').textContent = n;
+}
+function paintLive(state) {
+  const led = $('ledLive');
+  if (!led) return;
+  if (state === 'open') { led.className = 'led live'; }
+  else if (state === 'closed') { led.className = 'led err'; }
+  else { led.className = 'led'; }
+  const tb = $('tbEv');
+  if (tb) {
+    tb.textContent = state === 'open' ? ('EV ' + Live.frames) : 'EV —';
+    tb.className = 'chip hide-sm' + (state === 'open' ? ' live' : '');
+  }
+  renderLivePanel();
+}
+
+/* 顶栏音频开关的外观 */
+function paintTopAudio() {
+  const b = $('btnTopAudio');
+  if (!b) return;
+  const on = !!(typeof AudioCtl !== 'undefined' && AudioCtl.ws && AudioCtl.ws.readyState === 1);
+  b.classList.toggle('on', on);
+  b.title = on ? '音频流直播中 · 点击停止' : '音频流已关闭 · 点击连接';
+}
+
+/* ------------------------------------------------------------ KV 渲染 */
+function renderKV(el, rows) {
+  el.innerHTML = rows.map((row) => {
+    const [k, v, cls] = row;
+    const val = (v === '' || v == null) ? '—' : String(v);
+    return `<dt class="k">${esc(k)}</dt><dd class="v${cls ? ' ' + cls : ''}" title="${esc(val)}">${esc(val)}</dd>`;
+  }).join('');
+}
+function chip(el, text, kind) {
+  el.className = 'chip' + (kind ? ' ' + kind : '');
+  el.textContent = text;
+}
+const roleText = (r) => (r === 0 ? '普通用户' : r === 1 ? '服务器管理员' : r === 2 ? '服务器拥有者' : '—');
+
+/* ============================ 导航 ============================ */
+function showTab(name) {
+  document.querySelectorAll('nav button[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'p-' + name));
+  const map = { comms: '通信', station: '电台控制', qso: '通联台账', msg: '消息终端', events: '事件', config: '配置', wifi: '无线', upgrade: '升级', log: '原始日志' };
+  document.title = 'FMO.Plus // ' + (map[name] || name).toUpperCase();
+  const btn = document.querySelector(`nav button[data-tab="${name}"]`);
+  if (btn) { btn.dataset.live = '0'; }        // 进入该页即认为“已看过”
+  App.tab = name;
+  // 音频频谱画布在图幅切换后需要重新量尺寸（音频面板在电台页顶部）
+  if (name === 'station') setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
+  // 首次进入该页自动加载（按钮保留用于手动刷新）
+  setTimeout(() => autoLoad(name), 40);
+}
+document.querySelectorAll('nav button[data-tab]').forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
+function dotOn(tab) { const b = document.querySelector(`nav button[data-tab="${tab}"]`); if (b) b.dataset.live = '1'; }
+
+/* ============================ 通信 ============================ */
+async function loadInfo() {
+  chip($('chipInfo'), '读取中', 'warn');
+  try {
+    const info = await Link.request('user', 'getInfo');
+    App.info = info;
+    let role = null;
+    try { const r = await Link.request('config', 'getRole'); role = r.role; App.role = role; } catch (e) { }
+    renderKV($('kvInfo'), [
+      ['呼号', info.callsign], ['UID', info.uid], ['角色', roleText(role)],
+      ['局域网 IP', info.wlanIP], ['证书指纹', info.certFingerprint], ['签发序列', info.issuerSn],
+      ['MQTT 主机', info.mqttHost], ['MQTT 端口', info.mqttPort],
+    ]);
+    chip($('chipInfo'), info.callsign || 'OK', 'ok');
+    applyRoleGate();
+  } catch (e) {
+    chip($('chipInfo'), '失败', 'err');
+    toast('err', '拉取身份失败', e.message);
+  }
+}
+$('btnInfo').onclick = loadInfo;
+$('btnCopyCert').onclick = async () => {
+  const v = App.info && App.info.certFingerprint;
+  if (!v) return toast('warn', '还没有指纹', '先拉取身份');
+  try { await navigator.clipboard.writeText(v); toast('ok', '指纹已复制'); }
+  catch (e) { toast('err', '复制失败', e.message); }
+};
+
+async function loadScrMode() {
+  try {
+    const d = await Link.request('ui', 'getScreenMode');
+    $('scrMode').value = String(d.mode ?? 0);
+    chip($('chipScr'), 'mode ' + (d.mode ?? '—'), 'ok');
+  } catch (e) { chip($('chipScr'), '超时', 'warn'); }
+}
+$('btnScrGet').onclick = loadScrMode;
+$('btnScrSet').onclick = async () => {
+  const mode = parseInt($('scrMode').value, 10);
+  try {
+    await Link.request('ui', 'setScreenMode', { mode });
+    chip($('chipScr'), '已设置 ' + mode, 'ok');
+    toast('ok', '屏幕模式已下发', 'mode=' + mode);
+  } catch (e) { chip($('chipScr'), '失败', 'err'); toast('err', '设置失败', e.message); }
+};
+
+async function pingOnce() {
+  try {
+    const t0 = performance.now();
+    await Link.request('config', 'getRole');
+    const dt = Math.round(performance.now() - t0);
+    toast('ok', '延迟 ' + dt + 'ms', 'getRole 往返');
+    paintLink();
+  } catch (e) { toast('err', 'Ping 失败', e.message); }
+}
+$('btnPing').onclick = pingOnce;
+
+async function diagAll() {
+  chip($('chipDiag'), '自检中', 'warn');
+  const steps = [
+    ['user', 'getInfo'], ['config', 'getRole'], ['config', 'getUrl'],
+    ['station', 'getCurrent'], ['qso', 'getList', { page: 0, pageSize: 1 }],
+  ];
+  let ok = 0, fail = 0; const t0 = performance.now();
+  for (const [t, s, d] of steps) {
+    try { await Link.request(t, s, d, { timeout: 5000 }); ok++; }
+    catch (e) { fail++; }
+  }
+  renderKV($('kvDiag'), [
+    ['连通', `${ok} 通过 / ${fail} 超时`],
+    ['总耗时', Math.round(performance.now() - t0) + ' ms'],
+    ['单次延迟', Link.lastLat != null ? Link.lastLat + ' ms' : '—'],
+    ['事件通道', (Live.ws && Live.ws.readyState === 1) ? 'LIVE' : '未连接'],
+    ['角色', roleText(App.role)],
+  ]);
+  chip($('chipDiag'), `${ok}/${ok + fail}`, fail ? 'warn' : 'ok');
+}
+$('btnDiagAll').onclick = diagAll;
+$('btnHistory').onclick = () => {
+  if (!Link.fire('qso', 'triggerPushHistory', {})) return toast('warn', '链路未连接');
+  toast('info', '已请求讲话历史', '结果经 /events 推送');
+};
+
+/* ============================ 无线 ============================ */
+const wifiState = { list: [], cur: null };
+
+async function loadWifiCurrent() {
+  chip($('chipWifiCur'), '…');
+  try {
+    const d = await Link.request('wifi', 'getWifi');
+    const list = Array.isArray(d.list) ? d.list : [];
+    const cur = list.find((x) => x.isConnected) || (d.ssid ? d : null);
+    wifiState.list = list;
+    wifiState.cur = cur;
+    if (cur) {
+      chip($('chipWifiCur'), 'CONNECTED', 'ok');
+      renderKV($('kvWifiCur'), [
+        ['SSID', cur.ssid], ['IP', cur.ip], ['信号', cur.rssi != null ? cur.rssi + ' dBm' : '—'],
+        ['加密', cur.encryption ? '是' : '否'], ['已保存', cur.isSaved ? '是' : '否'],
+      ]);
+    } else {
+      chip($('chipWifiCur'), '未连接', 'warn');
+      renderKV($('kvWifiCur'), [['状态', '当前未连接任何 WiFi']]);
+    }
+    if (list.length) renderWifi(list);
+  } catch (e) {
+    chip($('chipWifiCur'), '失败', 'err');
+    toast('err', '读取 WiFi 失败', e.message);
+  }
+}
+$('btnWifiReload').onclick = loadWifiCurrent;
+$('btnWifiDisc').onclick = () => confirmWord('断开当前 WiFi', '本机将立刻失去到设备的网络连接，只能用 AP 热点恢复。', 'DISC', async () => {
+  try { await Link.request('wifi', 'disconnectWifi'); toast('ok', '已下发断开'); setTimeout(loadWifiCurrent, 1200); }
+  catch (e) { toast('err', '断开失败', e.message); }
+});
+
+const rssiBars = (r) => {
+  const n = r >= -77 ? 4 : r >= -88 ? 3 : r >= -95 ? 2 : r >= -99 ? 1 : 0;
+  return '▁▂▃▄'.split('').map((ch, i) => `<span style="color:${i < n ? 'var(--accent)' : 'var(--fg-faint)'}">${ch}</span>`).join('');
+};
+
+function renderWifi(list) {
+  const tb = $('tblWifi').querySelector('tbody');
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="6" class="hint">没有扫描结果</td></tr>'; return; }
+  tb.innerHTML = list.map((w, i) => {
+    const st = [];
+    if (w.isConnected) st.push('<span class="chip ok">已连接</span>');
+    if (w.isSaved) st.push('<span class="chip">已保存</span>');
+    if (!st.length) st.push('<span class="chip">未保存</span>');
+    const acts = [];
+    if (w.isConnected) acts.push(`<button class="mini danger" data-act="disc" data-ssid="${esc(w.ssid)}">断开</button>`);
+    else acts.push(`<button class="mini primary" data-act="conn" data-ssid="${esc(w.ssid)}" data-enc="${w.encryption ? 1 : 0}" data-saved="${w.isSaved ? 1 : 0}">接入</button>`);
+    if (w.isSaved) acts.push(`<button class="mini" data-act="forget" data-ssid="${esc(w.ssid)}">忘记</button>`);
+    return `<tr>
+      <td class="num">${i + 1}</td>
+      <td title="${esc(w.ssid)}">${esc(w.ssid)}</td>
+      <td>${w.encryption ? '加密' : '开放'}</td>
+      <td class="num">${rssiBars(w.rssi || -100)} ${w.rssi != null ? w.rssi : '—'}</td>
+      <td>${st.join(' ')}</td>
+      <td>${acts.join(' ')}</td>
+    </tr>`;
+  }).join('');
+}
+
+$('tblWifi').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-act]');
+  if (!btn) return;
+  const act = btn.dataset.act, ssid = btn.dataset.ssid;
+  btn.disabled = true;
+  try {
+    if (act === 'disc') {
+      await Link.request('wifi', 'disconnectWifi');
+      toast('ok', '已断开', ssid);
+      await sleep(1200); await loadWifiCurrent();
+    } else if (act === 'forget') {
+      await Link.request('wifi', 'forgetWifi', { ssid });
+      toast('ok', '已忘记网络', ssid);
+      await sleep(1000); await loadWifiCurrent();
+    } else if (act === 'conn') {
+      const needPwd = btn.dataset.enc === '1' && btn.dataset.saved === '0';
+      if (!needPwd) await wifiConnect(ssid, '');
+      else askPassword(ssid);
+    }
+  } catch (e) { toast('err', '操作失败', e.message); }
+  finally { btn.disabled = false; }
+});
+
+function askPassword(ssid) {
+  modal({
+    title: '接入加密网络',
+    sub: ssid,
+    body: `<div class="row"><label class="fld">密码</label>
+      <input id="wpw" type="password" maxlength="63" style="flex:1 1 auto;min-width:120px" placeholder="8–63 位"></div>
+      <div class="hint" style="margin-top:6px">设备不区分密码错误与其他失败原因</div>`,
+    actions: [
+      { label: '取消' },
+      {
+        label: '连接', kind: 'primary',
+        onClick: ({ close, body }) => {
+          const pwd = (body.querySelector('#wpw') || {}).value || '';
+          if (pwd.length < 8 || pwd.length > 63) { toast('warn', '密码长度不合法', '需 8–63 位'); return false; }
+          close();
+          wifiConnect(ssid, pwd);
+        },
+      },
+    ],
+  });
+}
+
+async function wifiConnect(ssid, password) {
+  chip($('chipScan'), '连接中', 'warn');
+  try {
+    await Link.request('wifi', 'setWifi', { ssid, password }, { timeout: 8000 });
+    await sleep(6500);
+    let ok = false;
+    for (let i = 0; i < 4 && !ok; i++) {
+      try { await Link.request('wifi', 'setWifiResult', {}, { timeout: 6000 }); } catch (e) { }
+      ok = Link.lastCode === 0;
+      if (!ok) await sleep(2500);
+    }
+    toast(ok ? 'ok' : 'err', ok ? 'WiFi 连接成功' : 'WiFi 连接失败', ok ? ssid : '网络异常或密码有误');
+    chip($('chipScan'), ok ? 'OK' : '失败', ok ? 'ok' : 'err');
+    await loadWifiCurrent();
+  } catch (e) { toast('err', '连接指令失败', e.message); chip($('chipScan'), '失败', 'err'); }
+}
+
+$('btnScan').onclick = async () => {
+  if (App.scanning) return;
+  App.scanning = true; App.scanAbort = false;
+  $('btnScan').disabled = true;
+  chip($('chipScan'), 'SCANNING', 'warn');
+  $('scanHint').textContent = '设备侧扫描中，请勿重复点击…';
+  $('scanBar').style.width = '4%';
+  try {
+    await Link.request('wifi', 'scanWifi', {}, { timeout: 6000 });
+    let list = null;
+    for (let i = 0; i < 16; i++) {           // 16 × 2s = 32s 上限
+      if (App.scanAbort) throw new Error('已中止');
+      await sleep(2000);
+      $('scanBar').style.width = Math.min(94, 6 + i * 6) + '%';
+      $('scanHint').textContent = `扫描中… ${(i + 1) * 2}s`;
+      try {
+        const d = await Link.request('wifi', 'scanWifiResult', {}, { timeout: 5000 });
+        const code = Link.lastCode;
+        if (code === 0) { list = (d && d.list) || []; break; }
+        if (code === -5 || code === -1) continue;
+        throw new Error('设备返回错误 code=' + code);
+      } catch (e) {
+        if (String(e.message).indexOf('code=') === 0) throw e;
+      }
+    }
+    if (!list) throw new Error('扫描超时，可再点一次');
+    $('scanBar').style.width = '100%';
+    renderWifi(list);
+    chip($('chipScan'), list.length + ' 个', 'ok');
+    $('scanHint').textContent = `发现 ${list.length} 个网络`;
+    toast('ok', '扫描完成', list.length + ' 个网络');
+  } catch (e) {
+    $('scanBar').style.width = '0%';
+    chip($('chipScan'), '失败', 'err');
+    $('scanHint').textContent = e.message;
+    toast('err', '扫描失败', e.message);
+  } finally {
+    App.scanning = false;
+    $('btnScan').disabled = false;
+    setTimeout(() => { $('scanBar').style.width = '0%'; }, 1200);
+  }
+};
+$('btnScanStop').onclick = () => { if (App.scanning) { App.scanAbort = true; toast('warn', '正在中止扫描'); } };
+
+$('btnWifiSave').onclick = async () => {
+  const ssid = $('wSsid').value.trim();
+  const password = $('wPass').value;
+  if (!ssid) return toast('warn', 'SSID 不能为空');
+  if (bytesOf(ssid) > 32) return toast('warn', 'SSID 过长', '上限 32 字节');
+  if (password && (password.length < 8 || password.length > 63)) return toast('warn', '密码需为空或 8–63 位');
+  chip($('chipSave'), '保存中', 'warn');
+  try {
+    await Link.request('wifi', 'saveWifi', { ssid, password });
+    chip($('chipSave'), '已保存', 'ok');
+    toast('ok', '已保存网络', ssid);
+    $('wSsid').value = ''; $('wPass').value = '';
+    await sleep(900); await loadWifiCurrent();
+  } catch (e) { chip($('chipSave'), '失败', 'err'); toast('err', '保存失败', e.message); }
+};
+
+/* ============================ 通联 ============================ */
+const qsoState = { page: 0, pageSize: 20, count: 0 };
+
+async function loadQso() {
+  chip($('chipQso'), '读取中', 'warn');
+  try {
+    const d = await Link.request('qso', 'getList', { page: qsoState.page, pageSize: qsoState.pageSize });
+    const list = d.list || [];
+    qsoState.count = d.count != null ? d.count : list.length;
+    $('qsoPage').textContent = `第 ${qsoState.page + 1} 页`;
+    chip($('chipQso'), qsoState.count + ' 条', 'ok');
+    const tb = $('tblQso').querySelector('tbody');
+    if (!list.length) { tb.innerHTML = '<tr><td colspan="5" class="hint">没有记录</td></tr>'; return; }
+    tb.innerHTML = list.map((q) => {
+      const id = q.logId != null ? q.logId : (q.logID != null ? q.logID : 0);
+      return `<tr class="clickable" data-logid="${id}">
+        <td class="num">${id}</td><td class="num">${fmtTime(q.timestamp)}</td>
+        <td>${esc(q.toCallsign || '—')}</td><td class="num">${esc(q.grid || '—')}</td>
+        <td class="num">${fmtAgo(q.timestamp)}</td></tr>`;
+    }).join('');
+  } catch (e) { chip($('chipQso'), '失败', 'err'); toast('err', '读取通联失败', e.message); }
+}
+$('btnQsoList').onclick = loadQso;
+$('btnQsoPrev').onclick = () => { if (qsoState.page > 0) { qsoState.page--; loadQso(); } };
+$('btnQsoNext').onclick = () => {
+  if ((qsoState.page + 1) * qsoState.pageSize < qsoState.count) { qsoState.page++; loadQso(); }
+  else toast('info', '已经是最后一页');
+};
+
+$('tblQso').addEventListener('click', async (ev) => {
+  const tr = ev.target.closest('tr[data-logid]');
+  if (!tr) return;
+  const id = Number(tr.dataset.logid);
+  const m = modal({ title: `通联 #${id}`, sub: '读取中…', body: '<dl class="kv" id="qd"></dl>', actions: [{ label: '关闭' }] });
+  try {
+    const d = await Link.request('qso', 'getDetail', { logId: id });
+    const log = d.log || {};
+    m.box.querySelector('.sub').textContent = log.toCallsign ? '与 ' + log.toCallsign + ' 的通联' : '通联详情';
+    const rows = [
+      ['日志 ID', log.logId], ['对方呼号', log.toCallsign], ['时间', fmtTime(log.timestamp)],
+      ['本机网格', log.fromGrid], ['对方网格', log.toGrid],
+      ['频率', log.freqHz != null ? (log.freqHz / 10000).toFixed(4) + ' MHz' : ''],
+      ['中继', log.relayName ? (log.relayAdmin ? `${log.relayName} (${log.relayAdmin})` : log.relayName) : ''],
+    ];
+    m.box.querySelector('#qd').innerHTML = rows.map(([k, v]) =>
+      `<dt class="k">${esc(k)}</dt><dd class="v" title="${esc(v == null ? '' : v)}">${esc(v == null || v === '' ? '—' : v)}</dd>`).join('') +
+      (log.toComment ? `<div style="grid-column:1/-1;margin-top:9px"><div class="hint">对方寄语</div>
+        <div style="color:var(--fg);white-space:pre-wrap">${esc(log.toComment)}</div></div>` : '');
+  } catch (e) {
+    m.box.querySelector('#qd').innerHTML = `<dt class="k">错误</dt><dd class="v" style="color:var(--err)">${esc(e.message)}</dd>`;
+  }
+});
+
+$('btnQsoSign').onclick = async () => {
+  try { const d = await Link.request('qso', 'getSign'); $('qsoKeyOut').value = d.signature || '(空)'; chip($('chipKey'), 'SIGNED', 'ok'); toast('ok', '签名已生成'); }
+  catch (e) { toast('err', '签名失败', e.message); }
+};
+$('btnQsoPub').onclick = async () => {
+  try { const d = await Link.request('qso', 'getPublicKey'); $('qsoKeyOut').value = d.publicKey || '(空)'; chip($('chipKey'), 'KEY', 'ok'); }
+  catch (e) { toast('err', '读取公钥失败', e.message); }
+};
+$('btnQsoReset').onclick = () => confirmWord('重置密钥对', '重置后历史签名无法用旧公钥验证。', 'RESET', async () => {
+  try { await Link.request('qso', 'resetKeyPair'); toast('ok', '密钥对已重置'); } catch (e) { toast('err', '失败', e.message); }
+});
+$('btnQsoClear').onclick = () => confirmWord('清空全部通联', '不可撤销，建议先备份。', 'CLEAR', async () => {
+  try { await Link.request('qso', 'clearAll'); toast('ok', '已清空'); qsoState.page = 0; loadQso(); } catch (e) { toast('err', '失败', e.message); }
+});
+
+/* 备份 / ADIF：隐藏表单 POST + /events 进度 + 下载 */
+function hostHttp() { return 'http://' + (App.host || $('host').value.trim()); }
+function qsoHttp(path, label) {
+  let fr = $('fmoPostFrame');
+  if (!fr) { fr = document.createElement('iframe'); fr.id = 'fmoPostFrame'; fr.name = 'fmoPostFrame'; fr.style.display = 'none'; document.body.appendChild(fr); }
+  const form = document.createElement('form');
+  form.method = 'POST'; form.action = hostHttp() + path; form.target = 'fmoPostFrame'; form.style.display = 'none';
+  document.body.appendChild(form); form.submit();
+  setTimeout(() => form.remove(), 2500);
+  $('qsoProgHint').textContent = label + ' 已提交，等待设备处理…';
+  $('qsoBar').style.width = '3%';
+  $('qsoDlRow').style.display = 'none';
+  toast('info', label + ' 已提交', '完成后出现下载按钮');
+}
+$('btnQsoBackup').onclick = () => qsoHttp('/api/qso/backup', '备份');
+$('btnQsoAdif').onclick = () => qsoHttp('/api/qso/adif', 'ADIF 导出');
+
+/* ============================ 消息 ============================ */
+const msgState = { list: [], anchor: 0, more: false, sel: null };
+
+async function loadMsg(append) {
+  chip($('chipMsg'), '读取中', 'warn');
+  try {
+    const d = await Link.request('message', 'getList', { page: 0, pageSize: 20, anchorId: append ? msgState.anchor : 0 });
+    const list = d.list || [];
+    msgState.list = append ? msgState.list.concat(list) : list;
+    msgState.anchor = d.nextAnchorId || 0;
+    msgState.more = !!msgState.anchor;
+    const unread = msgState.list.filter((x) => !x.isRead).length;
+    chip($('chipMsg'), `${msgState.list.length} 条 · ${unread} 未读`, unread ? 'warn' : 'ok');
+    const tb = $('tblMsg').querySelector('tbody');
+    tb.innerHTML = msgState.list.length ? msgState.list.map((m) => `
+      <tr class="clickable ${m.isRead ? '' : 'unread'}" data-mid="${m.messageId}">
+        <td class="num">${m.messageId}</td>
+        <td title="${esc(m.from || '')}">${esc(m.from || '—')}</td>
+        <td class="num">${fmtTime(m.timestamp)}</td>
+        <td>${m.isRead ? '<span class="chip">已读</span>' : '<span class="chip live">未读</span>'}</td>
+      </tr>`).join('') : '<tr><td colspan="4" class="hint">收件箱为空</td></tr>';
+  } catch (e) { chip($('chipMsg'), '失败', 'err'); toast('err', '读取消息失败', e.message); }
+}
+$('btnMsgList').onclick = () => loadMsg(false);
+$('btnMsgMore').onclick = () => { if (msgState.more) loadMsg(true); else toast('info', '没有更多消息'); };
+$('btnMsgDelAll').onclick = () => confirmWord('删除全部消息', '不可撤销。', 'CLEAR', async () => {
+  try { await Link.request('message', 'deleteAll'); toast('ok', '已删除全部'); loadMsg(false); } catch (e) { toast('err', '失败', e.message); }
+});
+
+$('tblMsg').addEventListener('click', async (ev) => {
+  const tr = ev.target.closest('tr[data-mid]');
+  if (!tr) return;
+  const id = Number(tr.dataset.mid);
+  msgState.sel = id;
+  chip($('chipMsgDetail'), '#' + id, 'live');
+  try {
+    const d = await Link.request('message', 'getDetail', { messageId: id });
+    const m = d.message || {};
+    renderKV($('kvMsg'), [
+      ['ID', m.messageId], ['来自', m.from], ['发往', m.to], ['时间', fmtTime(m.timestamp)],
+      ['状态', m.isRead ? '已读' : '未读'],
+    ]);
+    const body = m.message || m.text || m.content || '';
+    let boxEl = $('msgBodyBox');
+    if (!boxEl) {
+      boxEl = document.createElement('div');
+      boxEl.id = 'msgBodyBox';
+      boxEl.style.cssText = 'margin-top:9px;border:1px solid var(--line);background:var(--inset);padding:8px;white-space:pre-wrap;color:var(--fg);max-height:140px;overflow:auto';
+      $('kvMsg').parentNode.appendChild(boxEl);
+    }
+    boxEl.textContent = body || '(无正文)';
+    if (!m.isRead) {
+      try {
+        await Link.request('message', 'setRead', { messageId: id });
+        const it = msgState.list.find((x) => x.messageId === id);
+        if (it) it.isRead = 1;
+        const tb = $('tblMsg').querySelector('tbody');
+        const row = tb.querySelector(`tr[data-mid="${id}"]`);
+        if (row) { row.classList.remove('unread'); row.lastElementChild.innerHTML = '<span class="chip">已读</span>'; }
+      } catch (e) { }
+    }
+  } catch (e) { toast('err', '读取详情失败', e.message); }
+});
+
+$('btnMsgSend').onclick = async () => {
+  const callsign = ($('msgTo').value || '').trim().toUpperCase();
+  const ssid = parseInt($('msgSsid').value || '0', 10);
+  const text = $('msgText').value || '';
+  if (!/^[A-Z0-9]{1,15}$/.test(callsign)) return toast('warn', '呼号不合法', '仅字母数字，≤15 位，不含 SSID');
+  if (!(ssid >= 0 && ssid <= 15)) return toast('warn', 'SSID 需 0–15');
+  if (!text) return toast('warn', '内容为空');
+  if (bytesOf(text) > 60) return toast('warn', '内容过长', bytesOf(text) + ' 字节 / 上限 60');
+  chip($('chipAck'), '发送中', 'warn');
+  try {
+    const d = await Link.request('message', 'send', { callsign, ssid, message: text });
+    if (d.result === 0) { toast('ok', '已提交发送', callsign + '-' + ssid); $('msgText').value = ''; chip($('chipAck'), '已提交', 'warn'); }
+    else { toast('err', '发送失败', 'result=' + d.result); chip($('chipAck'), '失败', 'err'); }
+  } catch (e) { chip($('chipAck'), '失败', 'err'); toast('err', '发送失败', e.message); }
+};
+$('btnMsgRead').onclick = async () => {
+  if (!msgState.sel) return toast('warn', '先选择一条消息');
+  try { await Link.request('message', 'setRead', { messageId: msgState.sel }); toast('ok', '已标记已读'); loadMsg(false); }
+  catch (e) { toast('err', '失败', e.message); }
+};
+$('btnMsgDel').onclick = () => {
+  if (!msgState.sel) return toast('warn', '先选择一条消息');
+  confirmWord('删除这条消息', '#' + msgState.sel, 'DEL', async () => {
+    try { await Link.request('message', 'deleteItem', { messageId: msgState.sel }); toast('ok', '已删除'); loadMsg(false); }
+    catch (e) { toast('err', '失败', e.message); }
+  });
+};
+
+/* ============================ 电台 ============================ */
+// 设备侧 station/getListRange：count≤20 全偏移稳定；24 在 start=48 会返回空包（实测），故上限取 20
+const ST_MAX = 20;
+const stState = { kind: 'getListRange', start: 0, count: 20, list: [], atEnd: false, lastGoodStart: 0 };
+const stLabels = { getListRange: '全部', getPinnedList: '收藏', getActiveList: '活跃' };
+
+async function loadStCurrent() {
+  chip($('chipStCur'), '…');
+  try {
+    const d = await Link.request('station', 'getCurrent');
+    chip($('chipStCur'), 'ACTIVE', 'ok');
+    renderKV($('kvStCur'), [['台站名称', d.name, 'strong'], ['UID', d.uid]]);
+  } catch (e) { chip($('chipStCur'), '失败', 'err'); toast('err', '读取当前电台失败', e.message); }
+}
+
+function renderStList() {
+  const page = Math.floor(stState.start / stState.count) + 1;
+  $('stPage').textContent = page;
+  const tail = stState.atEnd ? ' · 已到末尾' : '';
+  chip($('chipStList'), `${stLabels[stState.kind]} · 本页 ${stState.list.length} 条${tail}`, stState.atEnd ? 'warn' : 'ok');
+  $('btnStPrevPage').disabled = stState.start === 0;
+  $('btnStNextPage').disabled = stState.atEnd;
+  const tb = $('tblSt').querySelector('tbody');
+  tb.innerHTML = stState.list.length ? stState.list.map((s) => `
+      <tr class="clickable" data-uid="${s.uid}">
+        <td class="num">${s.uid}</td>
+        <td title="${esc(s.name)}">${esc(s.name || '')}</td>
+        <td><button class="mini" data-setuid="${s.uid}">切到</button></td>
+      </tr>`).join('') : '<tr><td colspan="3" class="hint">没有数据</td></tr>';
+}
+
+async function fetchStPage() {
+  const expect = stState.kind === 'getListRange' ? 'getListResponse' : stState.kind + 'Response';
+  const d = await Link.request('station', stState.kind, { start: stState.start, count: stState.count }, { expect });
+  return d.list || [];
+}
+
+async function loadStList(kind) {
+  if (kind) { stState.kind = kind; stState.start = 0; stState.atEnd = false; stState.lastGoodStart = 0; }
+  chip($('chipStList'), stLabels[stState.kind] + ' · 读取中', 'warn');
+  try {
+    let list = await fetchStPage();
+    if (!list.length && stState.start > 0) {
+      await sleep(450);                 // 设备偶发空包：补一次
+      list = await fetchStPage();
+    }
+    if (!list.length && stState.start > 0) {
+      // 真到末尾：回到上一个有效页的偏移，保留已渲染内容，并禁用「下一页」
+      stState.start = stState.lastGoodStart;
+      stState.atEnd = true;
+      renderStList();
+      toast('info', '已经是最后一页');
+      return;
+    }
+    stState.list = list;
+    stState.lastGoodStart = stState.start;
+    stState.atEnd = list.length < stState.count;
+    renderStList();
+  } catch (e) {
+    chip($('chipStList'), '失败', 'err');
+    toast('err', '读取电台列表失败', e.message);
+  }
+}
+$('btnStGet').onclick = loadStCurrent;
+$('btnStPrev').onclick = async () => {
+  try { const d = await Link.request('station', 'prev'); toast(d.result === 0 ? 'ok' : 'err', '上一个台站', 'result=' + d.result); loadStCurrent(); }
+  catch (e) { toast('err', '失败', e.message); }
+};
+$('btnStNext').onclick = async () => {
+  try { const d = await Link.request('station', 'next'); toast(d.result === 0 ? 'ok' : 'err', '下一个台站', 'result=' + d.result); loadStCurrent(); }
+  catch (e) { toast('err', '失败', e.message); }
+};
+document.querySelectorAll('[data-stlist]').forEach((b) => { b.onclick = () => loadStList(b.dataset.stlist); });
+$('btnStPrevPage').onclick = () => {
+  if (stState.start === 0) return toast('info', '已经是第一页');
+  stState.start = Math.max(0, stState.start - stState.count);
+  stState.atEnd = false;
+  loadStList();
+};
+$('btnStNextPage').onclick = () => {
+  if (stState.atEnd) return toast('info', '已经是最后一页');
+  stState.start += stState.count;
+  loadStList();
+};
+$('stPageSize').onchange = (ev) => {
+  const v = Math.min(ST_MAX, Math.max(1, parseInt(ev.target.value, 10) || ST_MAX));
+  stState.count = v;
+  stState.start = 0;
+  stState.atEnd = false;
+  stState.lastGoodStart = 0;
+  loadStList();
+};
+
+$('tblSt').addEventListener('click', async (ev) => {
+  const b = ev.target.closest('button[data-setuid]');
+  const tr = ev.target.closest('tr[data-uid]');
+  const uid = b ? Number(b.dataset.setuid) : (tr ? Number(tr.dataset.uid) : null);
+  if (uid == null) return;
+  try {
+    const d = await Link.request('station', 'setCurrent', { uid });
+    if (d.result === 0) { toast('ok', '已切换电台', 'uid ' + uid); loadStCurrent(); }
+    else toast('err', '切换失败', 'result=' + d.result);
+  } catch (e) { toast('err', '切换失败', e.message); }
+});
+
+$('btnStImport').onclick = async () => {
+  const rawPacket = ($('stRaw').value || '').trim();
+  if (!rawPacket) return toast('warn', '报文为空');
+  chip($('chipImport'), '导入中', 'warn');
+  try {
+    const d = await Link.request('station', 'importRawPacket', { rawPacket });
+    const txt = importResultText(d.result);
+    chip($('chipImport'), txt, d.result === 0 ? 'ok' : 'err');
+    toast(d.result === 0 ? 'ok' : 'err', '导入结果', txt);
+  } catch (e) { chip($('chipImport'), '失败', 'err'); toast('err', '导入失败', e.message); }
+};
+function importResultText(r) {
+  const map = { 0: '成功', '-1': '报文格式错误', '-2': '缺少字段', '-3': '时间戳无效', '-4': '呼号无效', '-5': '位置无效', '-6': '存储失败', '-7': '重复报文' };
+  return map[String(r)] || ('result=' + r);
+}
+
+/* ============================ 事件 / 黑名单 ============================ */
+const evState = { count: 20 };
+
+async function loadEvents(count) {
+  if (count) evState.count = count;
+  chip($('chipEv'), '读取中', 'warn');
+  try {
+    const d = await Link.request('event', 'getList', { count: evState.count });
+    const list = d.list || [];
+    chip($('chipEv'), list.length + ' 条', 'ok');
+    noteEventsBaseline(list);
+    const tb = $('tblEv').querySelector('tbody');
+    tb.innerHTML = list.length ? list.map((e, i) => `
+      <tr class="clickable ${e.isRead ? '' : 'unread'}" data-from="${e.fromUID}">
+        <td class="num">${i + 1}</td>
+        <td title="${esc(e.title || '')}">${esc(e.title || '(无标题)')}</td>
+        <td>${esc(e.fromCall || e.fromUID || '')}</td>
+        <td class="num">${fmtTime(e.timestamp)}</td>
+      </tr>`).join('') : '<tr><td colspan="4" class="hint">没有事件</td></tr>';
+  } catch (e) { chip($('chipEv'), '失败', 'err'); toast('err', '读取事件失败', e.message); }
+}
+/* 事件小点：/events 只推 ota/qso/message 等，不推“新公告”，
+   所以用 1 次/分钟的轻量轮询比较最新事件时间戳 */
+let evBaselineTs = null;
+function noteEventsBaseline(list) {
+  const newest = (list || []).reduce((m, e) => Math.max(m, e.timestamp || 0), 0);
+  if (newest) evBaselineTs = newest;
+}
+async function pollEventsQuiet() {
+  if (!Link.isOpen()) return;
+  try {
+    const d = await Link.request('event', 'getList', { count: 20 });
+    const list = d.list || [];
+    const newest = list.reduce((m, e) => Math.max(m, e.timestamp || 0), 0);
+    if (evBaselineTs != null && newest > evBaselineTs) dotOn('events');
+    if (newest) evBaselineTs = newest;
+  } catch (e) { /* 静默 */ }
+}
+$('btnEvList').onclick = () => loadEvents(20);
+$('btnEvMore').onclick = () => loadEvents(evState.count + 20);
+$('btnEvDelAll').onclick = () => confirmWord('清空全部事件', '不可撤销。', 'CLEAR', async () => {
+  try { await Link.request('event', 'deleteAll'); toast('ok', '事件已清空'); loadEvents(20); } catch (e) { toast('err', '失败', e.message); }
+});
+
+$('tblEv').addEventListener('click', async (ev) => {
+  const tr = ev.target.closest('tr[data-from]');
+  if (!tr) return;
+  const fromUID = Number(tr.dataset.from);
+  const m = modal({ title: '事件详情', sub: '读取中…', body: '<dl class="kv" id="evd"></dl>', actions: [{ label: '关闭' }] });
+  try {
+    const d = await Link.request('event', 'getDetail', { fromUID });
+    const e = d.event || {};
+    m.box.querySelector('.sub').textContent = e.title || '';
+    m.box.querySelector('#evd').innerHTML = [
+      ['来源呼号', e.fromCall], ['来源 UID', e.fromUID], ['时间', fmtTime(e.timestamp)],
+    ].map(([k, v]) => `<dt class="k">${esc(k)}</dt><dd class="v">${esc(v == null || v === '' ? '—' : v)}</dd>`).join('') +
+      (e.content ? `<div style="grid-column:1/-1;margin-top:9px"><div class="hint">正文</div>
+        <div style="white-space:pre-wrap;color:var(--fg)">${esc(e.content)}</div></div>` : '');
+  } catch (e) { m.box.querySelector('#evd').innerHTML = `<dt class="k">错误</dt><dd class="v" style="color:var(--err)">${esc(e.message)}</dd>`; }
+});
+
+$('btnEvPub').onclick = async () => {
+  const topic = ($('evTopic').value || '').trim();
+  const content = ($('evContent').value || '').trim();
+  if (!topic) return toast('warn', '主题为空');
+  if (bytesOf(topic) > 32) return toast('warn', '主题过长', bytesOf(topic) + '/32 字节');
+  if (bytesOf(content) > 140) return toast('warn', '内容过长', bytesOf(content) + '/140 字节');
+  try {
+    const d = await Link.request('event', 'publish', { topic, content });
+    toast(d.result === 0 ? 'ok' : 'err', '发布结果', 'result=' + d.result);
+    if (d.result === 0) { $('evTopic').value = ''; $('evContent').value = ''; }
+  } catch (e) { toast('err', '发布失败', e.message); }
+};
+$('btnBlkList').onclick = async () => {
+  chip($('chipBlk'), '读取中', 'warn');
+  try {
+    const d = await Link.request('blocked', 'getList', {}, { timeout: 4000 });
+    const list = d.list || [];
+    chip($('chipBlk'), list.length + ' 个', 'ok');
+    toast('info', '黑名单', list.length ? list.map((x) => x.callsign || x.uid).join(', ') : '为空');
+  } catch (e) {
+    chip($('chipBlk'), '不支持', 'warn');
+    toast('warn', '该固件未实现黑名单接口', '请求超时');
+  }
+};
+$('btnBlkUnblock').onclick = async () => {
+  const uid = parseInt($('blkUid').value, 10);
+  if (isNaN(uid)) return toast('warn', 'UID 无效');
+  try { const d = await Link.request('blocked', 'unblock', { uid }, { timeout: 4000 }); toast(d.result === 0 ? 'ok' : 'err', '解封', 'uid ' + uid); }
+  catch (e) { toast('err', '解封失败', e.message); }
+};
+
+/* ============================ 配置寄存器 ============================ */
+const CFG_GROUPS = [
+  {
+    id: 'aprs', title: 'APRS 服务器', hint: '改动需重启 APRS 服务生效',
+    fields: [
+      {
+        k: 'url', label: '服务器地址', get: 'getUrl', set: 'setUrl', type: 'text',
+        val: (d) => d.url, payload: (v) => ({ url: v }),
+        validate: (v) => {
+          if (v === '') return null;
+          if (/\s/.test(v)) return '不能含空格';
+          if (/[\/\\]/.test(v)) return '不能含斜杠';
+          if (!v.includes('.')) return '需是域名或 IP';
+          if (v.startsWith('.') || v.endsWith('.')) return '首尾不能是点';
+          if (v.length > 31) return '最长 31 字符';
+          return null;
+        },
+        note: '最长 31 字符；域名或 IPv4；留空清除',
+      },
+      {
+        k: 'port', label: '服务器端口', get: 'getPort', set: 'setPort', type: 'text',
+        val: (d) => d.port, payload: (v) => ({ port: parseInt(v, 10) }),
+        validate: (v) => { const n = parseInt(v, 10); return (!n || n < 1 || n > 65535) ? '需 1–65535' : null; },
+        note: '1–65535，建议 1883',
+      },
+      {
+        k: 'passcode', label: 'APRS PASSCODE', get: 'getPasscode', set: 'setPasscode', type: 'text',
+        val: (d) => d.passcode, payload: (v) => ({ passcode: v }),
+        validate: (v) => (/^\d{5}$/.test(v) || v === '-1') ? null : '5 位数字，或 -1',
+        note: '5 位数字；-1 表示禁用 APRS 广播',
+      },
+      {
+        k: 'aprsType', label: 'APRS 尾缀', get: 'getAprsType', set: 'setAprsType', type: 'select',
+        options: Array.from({ length: 15 }, (_, i) => [String(i + 1), String(i + 1)]),
+        val: (d) => String(d.aprsType ?? 1), payload: (v) => ({ aprsType: parseInt(v, 10) }),
+        note: '1–15；同一 APRS-IS 上多台设备必须不同',
+      },
+      {
+        k: 'remark', label: '个性化消息', get: 'getAprsRemark', set: 'setAprsRemark', type: 'textarea',
+        val: (d) => d.remark, payload: (v) => ({ remark: v }),
+        validate: (v) => bytesOf(v) <= 63 ? null : bytesOf(v) + '/63 字节',
+        note: '≤63 字节，随 APRS 公开广播',
+      },
+    ],
+  },
+  {
+    id: 'server', title: '服务器身份', admin: true, hint: 'role ≥ 1 可见',
+    fields: [
+      {
+        k: 'serverName', label: '服务器名称', get: 'getServerName', set: 'setServerName', type: 'text',
+        val: (d) => d.serverName, payload: (v) => ({ serverName: v }),
+        validate: (v) => v.length > 31 ? '最长 31 字符' : (v.includes(',') ? '不能含逗号' : null),
+        note: '最长 31 字符，不能用逗号',
+      },
+      {
+        k: 'serverFilter', label: '覆盖范围', get: 'getServerFilter', set: 'setServerFilter', type: 'select',
+        options: [[0, '0 · 禁用过滤'], [1, '1 · 50km'], [2, '2 · 100km'], [3, '3 · 200km'], [4, '4 · 500km'], [5, '5 · 1000km'], [6, '6 · 2000km'], [7, '7 · 5000km']],
+        val: (d) => String(d.serverFilter ?? 0), payload: (v) => ({ serverFilter: parseInt(v, 10) }),
+        note: '服务器端可见范围；不影响本机作为客户端',
+      },
+      {
+        k: 'announcement', label: '登录公告', get: 'getServerLoginAnnouncement', set: 'setServerLoginAnnouncement', type: 'textarea',
+        val: (d) => d.serverLoginAnnouncement, payload: (v) => ({ serverLoginAnnouncement: v }),
+        note: '用户登录你的服务器时看到',
+      },
+      {
+        k: 'assistAdmin', label: '协管 UID', get: 'getAssistAdminUID', set: 'setAssistAdminUID', type: 'text',
+        val: (d) => d.uid, payload: (v) => ({ uid: parseInt(v, 10) || 0 }),
+        note: '0 表示不设置',
+      },
+    ],
+  },
+  {
+    id: 'phy', title: '台站物理参数', hint: '随信标广播',
+    fields: [
+      { k: 'deviceName', label: '设备型号', get: 'getUserPhyDeviceName', set: 'setUserPhyDeviceName', type: 'text', val: (d) => d.deviceName, payload: (v) => ({ deviceName: v }) },
+      {
+        k: 'freq', label: '值守频率', get: 'getUserPhyFreq', set: 'setUserPhyFreq', type: 'text',
+        val: (d) => d.freq, payload: (v) => ({ freq: parseFloat(v) }),
+        validate: (v) => isNaN(parseFloat(v)) ? '需数字' : null, note: '单位 MHz，例如 438.5',
+      },
+      { k: 'ant', label: '天线 / QTH', get: 'getUserPhyAnt', set: 'setUserPhyAnt', type: 'text', val: (d) => d.ant, payload: (v) => ({ ant: v }) },
+      {
+        k: 'height', label: '天线高度', get: 'getUserPhyAntHeight', set: 'setUserPhyAntHeight', type: 'text',
+        val: (d) => d.height, payload: (v) => ({ height: parseInt(v, 10) }),
+        validate: (v) => isNaN(parseInt(v, 10)) ? '需整数' : null, note: '单位 m',
+      },
+    ],
+  },
+  {
+    id: 'coord', title: '位置坐标', hint: '用于 APRS 信标',
+    fields: [
+      {
+        k: 'lat', label: '纬度', get: 'getCordinate', set: 'setCordinate', type: 'text', pair: 'coord',
+        val: (d) => d.latitude,
+        validate: (v) => { const n = parseFloat(v); return (isNaN(n) || n < -90 || n > 90) ? '-90 ~ 90' : null; },
+        note: '例如 39.935575',
+      },
+      {
+        k: 'lng', label: '经度', get: 'getCordinate', set: 'setCordinate', type: 'text', pair: 'coord',
+        val: (d) => d.longitude,
+        validate: (v) => { const n = parseFloat(v); return (isNaN(n) || n < -180 || n > 180) ? '-180 ~ 180' : null; },
+        note: '例如 116.273371',
+      },
+    ],
+  },
+  {
+    id: 'misc', title: 'mDNS 与 QSO', hint: '',
+    fields: [
+      {
+        k: 'hostname', label: 'mDNS 别名', get: 'getMdnsAliasHostname', set: 'setMdnsAliasHostname', type: 'text',
+        val: (d) => d.hostname, payload: (v) => ({ hostname: v }),
+        validate: (v) => {
+          if (v === '') return null;
+          if (v.toLowerCase() === 'fmo') return 'fmo 保留不可用';
+          if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(v)) return '首尾须字母/数字，可含连字符';
+          if (v.length > 63) return '最长 63 字符';
+          return null;
+        },
+        note: '仅字母/数字/连字符，留空关闭；fmo.local 始终保留',
+      },
+      { k: 'bestWish', label: 'QSO 寄语', get: 'getQsoBestWish', set: 'setQsoBestWish', type: 'textarea', val: (d) => d.qsoBestWish, payload: (v) => ({ qsoBestWish: v }), note: '≤64 字节' },
+    ],
+  },
+  {
+    id: 'black', title: '黑名单', admin: true, hint: '逗号分隔，仅大写字母/数字/空格',
+    fields: [
+      {
+        k: 'blacklist', label: '服务器黑名单', get: 'getBlacklist', set: 'setBlacklist', type: 'textarea',
+        val: (d) => d.blacklist, payload: (v) => ({ blacklist: v }),
+        validate: (v) => /^[A-Z0-9, ]*$/.test(v) ? null : '仅大写字母/数字/空格/逗号',
+        note: '被拉黑呼号无法在本服务器收发',
+      },
+      {
+        k: 'userBlacklist', label: '用户黑名单', get: 'getUserBlacklist', set: 'setUserBlacklist', type: 'textarea',
+        val: (d) => d.blacklist, payload: (v) => ({ blacklist: v }),
+        validate: (v) => /^[A-Z0-9, ]*$/.test(v) ? null : '仅大写字母/数字/空格/逗号',
+        note: '这些用户的广播会被本机忽略',
+      },
+      ...[1, 2, 3].map((i) => ({
+        k: 'sub' + i, label: '订阅源 ' + i, get: 'getBlacklistSubscribeUrl', getData: { index: i },
+        set: 'setBlacklistSubscribeUrl', type: 'text',
+        val: (d) => d.url, payload: (v) => ({ index: i, url: v }),
+        validate: (v) => (v === '' || /^https?:\/\/\S+$/.test(v)) ? null : '需 http(s):// 开头',
+        note: '≤63 字节；留空删除该槽',
+      })),
+    ],
+  },
+];
+
+function cfgRow(f) {
+  const id = 'cfg-' + f.k;
+  let ctrl;
+  if (f.type === 'select') {
+    ctrl = `<select id="${id}" data-k="${f.k}">` +
+      (f.options || []).map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('') + '</select>';
+  } else if (f.type === 'textarea') {
+    ctrl = `<textarea id="${id}" data-k="${f.k}" rows="2"></textarea>`;
+  } else {
+    ctrl = `<input id="${id}" data-k="${f.k}" type="text" spellcheck="false">`;
+  }
+  return `<div class="cfg-row">
+    <label for="${id}" title="${esc(f.label)}">${esc(f.label)}</label>
+    ${ctrl}
+    <div class="ctl">
+      <button class="mini" data-read="${f.k}">读</button>
+      <button class="mini" data-write="${f.k}">写</button>
+      <span class="chip" data-chip="${f.k}">—</span>
+    </div>
+    ${f.note ? `<div class="note">${esc(f.note)}</div>` : ''}
+  </div>`;
+}
+
+function buildConfig() {
+  const host = $('cfgGroups');
+  host.innerHTML = '';
+  CFG_GROUPS.forEach((g) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    if (g.admin) card.dataset.admin = '1';
+    card.innerHTML = `<h3><span class="t">${esc(g.title)}</span>
+      ${g.admin ? '<span class="chip amber">ADMIN</span>' : ''}
+      ${g.hint ? `<span class="chip">${esc(g.hint)}</span>` : ''}</h3>
+      <div class="body">${g.fields.map(cfgRow).join('')}</div>`;
+    host.appendChild(card);
+  });
+  host.addEventListener('click', (ev) => {
+    const r = ev.target.closest('button[data-read]');
+    const w = ev.target.closest('button[data-write]');
+    if (r) readField(findField(r.dataset.read));
+    if (w) writeField(findField(w.dataset.write));
+  });
+}
+
+function findField(k) {
+  for (const g of CFG_GROUPS) {
+    const f = g.fields.find((x) => x.k === k);
+    if (f) return f;
+  }
+  return null;
+}
+function fieldChip(k, text, kind) {
+  const el = document.querySelector(`[data-chip="${k}"]`);
+  if (el) chip(el, text, kind);
+}
+async function readField(f) {
+  if (!f) return;
+  fieldChip(f.k, '…');
+  try {
+    const d = await Link.request('config', f.get, f.getData || {});
+    const v = f.val(d);
+    const el = $('cfg-' + f.k);
+    if (el) el.value = v == null ? '' : String(v);
+    fieldChip(f.k, '已读取', 'ok');
+  } catch (e) {
+    fieldChip(f.k, e.message.indexOf('超时') >= 0 ? '超时' : '失败', 'warn');
+  }
+}
+async function writeField(f) {
+  if (!f) return;
+  const el = $('cfg-' + f.k);
+  let v = el ? el.value : '';
+  if (f.type !== 'select') v = v.trim();
+  if (f.validate) {
+    const err = f.validate(v);
+    if (err) { toast('warn', f.label + ' 校验未通过', err); fieldChip(f.k, '校验失败', 'warn'); return; }
+  }
+  let payload;
+  if (f.pair === 'coord') {
+    const lat = parseFloat($('cfg-lat').value), lng = parseFloat($('cfg-lng').value);
+    if (isNaN(lat) || isNaN(lng)) { toast('warn', '经纬度都要填'); return; }
+    payload = { latitude: lat, longitude: lng };
+  } else payload = f.payload ? f.payload(v) : { value: v };
+  fieldChip(f.k, '写入中', 'warn');
+  try {
+    const d = await Link.request('config', f.set, payload);
+    const ok = d.result === 0 || d.result === undefined;
+    fieldChip(f.k, ok ? '已写入' : 'result=' + d.result, ok ? 'ok' : 'err');
+    toast(ok ? 'ok' : 'err', f.label, ok ? '写入成功' : '设备返回 result=' + d.result);
+    if (ok) {
+      // 设备写后回读有缓存延迟，隔一会儿再核对
+      setTimeout(() => readField(f), 1500);
+      if (f.get === 'getCordinate') setTimeout(() => readField(findField('lng')), 1500);
+    }
+  } catch (e) { fieldChip(f.k, '失败', 'err'); toast('err', f.label + ' 写入失败', e.message); }
+}
+async function readAllCfg() {
+  chip($('chipCfg'), '读取中', 'warn');
+  const all = [];
+  CFG_GROUPS.forEach((g) => {
+    if (g.admin && (App.role == null ? 0 : App.role) < 1) return;
+    g.fields.forEach((f) => all.push(f));
+  });
+  let ok = 0, fail = 0;
+  for (const f of all) {
+    try {
+      const d = await Link.request('config', f.get, f.getData || {});
+      const v = f.val(d);
+      const el = $('cfg-' + f.k);
+      if (el) el.value = v == null ? '' : String(v);
+      fieldChip(f.k, '已读取', 'ok');
+      ok++;
+    } catch (e) { fieldChip(f.k, '超时', 'warn'); fail++; }
+  }
+  chip($('chipCfg'), `${ok} 成功 / ${fail} 失败`, fail ? 'warn' : 'ok');
+}
+$('btnCfgAll').onclick = readAllCfg;
+$('btnCfgRestart').onclick = () => confirmWord('重启 APRS 服务', '服务会短暂中断后重连。', 'RESTART', async () => {
+  try { const d = await Link.request('config', 'restartAprsService'); toast('ok', '已下发重启', 'result=' + d.result); }
+  catch (e) { toast('err', '失败', e.message); }
+});
+$('btnCfgBroadcastSrv').onclick = async () => {
+  try { const d = await Link.request('config', 'setBroadcastServer'); toast(d.result === 0 ? 'ok' : 'err', '广播服务器', 'result=' + d.result); }
+  catch (e) { toast('err', '失败', e.message); }
+};
+$('btnCfgBroadcastUser').onclick = async () => {
+  try { const d = await Link.request('config', 'setBroadcastUser'); toast(d.result === 0 ? 'ok' : 'err', '广播用户', 'result=' + d.result); }
+  catch (e) { toast('err', '失败', e.message); }
+};
+function applyRoleGate() {
+  const admin = (App.role == null ? 0 : App.role) >= 1;
+  document.querySelectorAll('#cfgGroups .card[data-admin]').forEach((c) => { c.style.display = admin ? '' : 'none'; });
+}
+
+/* ============================ 升级 ============================ */
+const upState = { hasNew: false, version: '', info: '', busy: false };
+
+async function upCheck() {
+  const channel = $('upChannel').value;
+  chip($('chipOta'), '查询中', 'warn');
+  $('ledOta').className = 'led warn';
+  try {
+    await Link.request('config', channel, {}, { timeout: 8000 });
+    let res = null;
+    for (let i = 0; i < 8; i++) {
+      await sleep(1200);
+      try {
+        const d = await Link.request('config', 'getUpgradeQueryResult');
+        res = d;
+        if (Number(d.busy) === 0) break;
+      } catch (e) { }
+      chip($('chipOta'), '查询中 ' + (i + 1), 'warn');
+    }
+    if (!res) throw new Error('设备未返回查询结果');
+    upState.hasNew = Number(res.hasNewVersion) === 1;
+    upState.version = res.version || '';
+    upState.info = res.info || '';
+    renderKV($('kvUp'), [
+      ['通道', $('upChannel').selectedOptions[0].textContent],
+      ['状态', Number(res.busy) === 1 ? '设备仍在查询' : '已完成'],
+      ['新版本', upState.hasNew ? (upState.version || '有更新') : (upState.version || '已是最新')],
+      ['说明', upState.info],
+    ]);
+    chip($('chipOta'), upState.hasNew ? '可升级' : '已最新', upState.hasNew ? 'warn' : 'ok');
+    $('ledOta').className = 'led ' + (upState.hasNew ? 'warn' : 'ok');
+    $('btnUpStart').disabled = !upState.hasNew;
+    toast(upState.hasNew ? 'ok' : 'info', upState.hasNew ? '发现新版本' : '已是最新', upState.version || upState.info || '');
+  } catch (e) {
+    chip($('chipOta'), '失败', 'err');
+    $('ledOta').className = 'led err';
+    toast('err', '检查更新失败', e.message);
+  }
+}
+$('btnUpCheck').onclick = upCheck;
+async function upRuntime() {
+  try {
+    const d = await Link.request('config', 'getUpgradeRuntime');
+    const busy = Number(d.isUpgrading) === 1;
+    $('otaHint').textContent = busy ? '设备正在升级中…' : '当前没有进行中的升级任务';
+    if (busy) $('otaBar').style.width = '60%';
+    chip($('chipOta'), busy ? '升级中' : '空闲', busy ? 'warn' : 'ok');
+    return busy;
+  } catch (e) { chip($('chipOta'), '读取失败', 'warn'); return null; }
+}
+$('btnUpRuntime').onclick = upRuntime;
+$('btnUpStart').onclick = () => {
+  if (!upState.hasNew) return toast('warn', '没有可升级版本');
+  confirmWord('启动固件升级', `将升级到 ${upState.version || '新版本'}，设备会自动重启。不要断电。`, 'UPGRADE', async () => {
+    try {
+      const d = await Link.request('config', 'startUpgrade', {}, { timeout: 15000 });
+      toast(d.result === 0 ? 'ok' : 'err', '升级指令已下发', 'result=' + d.result);
+      $('otaBar').style.width = '8%';
+      $('otaHint').textContent = '升级进行中，进度经 /events 推送…';
+      chip($('chipOta'), '升级中', 'warn');
+      $('ledOta').className = 'led warn';
+    } catch (e) { toast('err', '升级指令失败', e.message); }
+  });
+};
+$('btnReboot').onclick = () => confirmWord('重启系统', '设备将断开连接，约 20–30 秒后恢复。', 'REBOOT', async () => {
+  try { const d = await Link.request('config', 'rebootSystem', {}, { timeout: 8000 }); toast('ok', '重启指令已下发', 'result=' + d.result); }
+  catch (e) { toast('warn', '未收到响应', '设备可能已开始重启'); }
+});
+$('btnReset').onclick = () => confirmWord('系统重置', '将擦除全部配置与日志，不可撤销。', 'RESET', async () => {
+  try { const d = await Link.request('config', 'systemReset', {}, { timeout: 8000 }); toast('ok', '重置指令已下发', 'result=' + d.result); }
+  catch (e) { toast('warn', '未收到响应', '设备可能已开始复位'); }
+});
+
+/* ============================ 音频 ============================ */
+const AudioCtl = {
+  ws: null, ctx: null, anal: null, gain: null, sched: 0, srcs: [], raf: 0,
+  frames: 0, samples: 0, SR: 8000, waitTimer: null, startedAt: null,
+
+  paintAudio() {
+    const waited = this.startedAt ? Math.round((Date.now() - this.startedAt) / 1000) : 0;
+    const live = !!this.ws;
+    renderKV($('kvAudio'), [
+      ['状态', this.frames > 0 ? '接收中' : (live ? '等待音频 ' + waited + 's（无活动通联时不推流）' : '未连接')],
+      ['采样率', this.SR + ' Hz'],
+      ['已收帧', this.frames],
+      ['累计时长', (this.samples / this.SR).toFixed(1) + ' s'],
+      ['缓冲队列', this.srcs.length + ' 段'],
+    ]);
+  },
+  ensure() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new AC();
+    this.gain = this.ctx.createGain();
+    this.gain.gain.value = Number($('audioVol').value) / 100;
+    this.anal = this.ctx.createAnalyser();
+    this.anal.fftSize = 1024;
+    this.gain.connect(this.anal);
+    this.anal.connect(this.ctx.destination);
+    this.sizeCanvas();
+    this.draw();
+  },
+  sizeCanvas() {
+    const cv = $('viz');
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth || 600, h = cv.clientHeight || 120;
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+  },
+  draw() {
+    const cv = $('viz');
+    const c = cv.getContext('2d');
+    const bins = this.anal ? this.anal.frequencyBinCount : 0;
+    const data = new Uint8Array(bins || 1);
+    const loop = () => {
+      if (!this.ctx) return;
+      const W = cv.width, H = cv.height;
+      c.clearRect(0, 0, W, H);
+      if (this.anal) {
+        this.anal.getByteFrequencyData(data);
+        const bw = W / bins;
+        for (let i = 0; i < bins; i++) {
+          const v = data[i] / 255;
+          c.fillStyle = `rgba(127,211,90,${0.25 + v * 0.7})`;
+          c.fillRect(i * bw, H - v * H, Math.max(1, bw - 1), v * H);
+        }
+        let peak = 0;
+        for (let i = 0; i < bins; i++) peak = Math.max(peak, data[i]);
+        $('audioMeter').style.width = Math.min(100, peak) + '%';
+      }
+      this.raf = requestAnimationFrame(loop);
+    };
+    this.raf = requestAnimationFrame(loop);
+  },
+  async start() {
+    this.ensure();
+    if (this.ctx.state === 'suspended') { try { await this.ctx.resume(); } catch (e) { } }
+    if (this.ws) return;
+    const url = 'ws://' + (App.host || $('host').value.trim()) + '/audio';
+    chip($('chipAudio'), '连接中', 'warn');
+    $('ledAudio').className = 'led warn';
+    paintTopAudio();
+    let ws;
+    try { ws = new WebSocket(url); } catch (e) { toast('err', '音频打开失败', e.message); return; }
+    ws.binaryType = 'arraybuffer';
+    this.ws = ws;
+    ws.onopen = () => {
+      chip($('chipAudio'), 'LIVE', 'live');
+      $('ledAudio').className = 'led live';
+      LOG.add('sy', '[audio] 已连接（有声才推流）');
+      this.startedAt = Date.now();
+      this.paintAudio(true);
+      clearInterval(this.waitTimer);
+      this.waitTimer = setInterval(() => this.paintAudio(false), 1000);
+      paintTopAudio();
+    };
+    ws.onclose = () => {
+      chip($('chipAudio'), '已停止', '');
+      $('ledAudio').className = 'led';
+      this.ws = null;
+      clearInterval(this.waitTimer);
+      paintTopAudio();
+    };
+    ws.onerror = () => { chip($('chipAudio'), '错误', 'err'); $('ledAudio').className = 'led err'; paintTopAudio(); };
+    ws.onmessage = (ev) => {
+      const buf = ev.data;
+      if (!(buf instanceof ArrayBuffer) || buf.byteLength < 2) return;
+      const i16 = new Int16Array(buf, 0, Math.floor(buf.byteLength / 2));
+      const f32 = new Float32Array(i16.length);
+      for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+      this.frames++;
+      this.samples += i16.length;
+      const b = this.ctx.createBuffer(1, f32.length, this.SR);
+      b.copyToChannel(f32, 0);
+      const src = this.ctx.createBufferSource();
+      src.buffer = b;
+      src.connect(this.gain);
+      const start = Math.max(this.ctx.currentTime, this.sched);
+      src.start(start);
+      this.sched = start + b.duration;
+      this.srcs.push(src);
+      src.onended = () => { const i = this.srcs.indexOf(src); if (i >= 0) this.srcs.splice(i, 1); };
+      if (this.frames % 5 === 0) this.paintAudio();
+    };
+  },
+  stop() {
+    if (this.ws) { try { this.ws.close(); } catch (e) { } this.ws = null; }
+    this.srcs.forEach((s) => { try { s.stop(); } catch (e) { } });
+    this.srcs = [];
+    this.sched = 0;
+    clearInterval(this.waitTimer);
+    this.startedAt = null;
+    chip($('chipAudio'), '待命', '');
+    $('ledAudio').className = 'led';
+    $('audioMeter').style.width = '0%';
+    this.paintAudio();
+    paintTopAudio();
+  },
+};
+$('btnAudioStart').onclick = () => AudioCtl.start();
+$('btnAudioStop').onclick = () => AudioCtl.stop();
+$('audioVol').oninput = (e) => {
+  const v = Number(e.target.value);
+  $('audioVolTxt').textContent = v + '%';
+  if (AudioCtl.gain) AudioCtl.gain.gain.value = v / 100;
+};
+window.addEventListener('resize', () => { if (AudioCtl.ctx) AudioCtl.sizeCanvas(); });
+
+/* ============================ 原始日志 / 手动 ============================ */
+$('logFilter').oninput = () => { };
+$('logPause').onchange = (e) => { LOG.paused = e.target.checked; toast('info', e.target.checked ? '日志已暂停' : '日志继续'); };
+$('btnLogClear').onclick = () => LOG.clear();
+$('btnLogDump').onclick = () => LOG.dump();
+$('btnManual').onclick = async () => {
+  const type = ($('mType').value || '').trim();
+  const subType = ($('mSub').value || '').trim();
+  let data;
+  try { data = JSON.parse(($('mData').value || '{}').trim() || '{}'); }
+  catch (e) { return toast('err', 'data 不是合法 JSON', e.message); }
+  if (!type || !subType) return toast('warn', 'type / subType 不能为空');
+  chip($('chipManual'), '…', 'warn');
+  const t0 = performance.now();
+  try {
+    const d = await Link.request(type, subType, data, { timeout: 8000 });
+    $('mOut').value = `[${Math.round(performance.now() - t0)}ms] code=${Link.lastCode}\n` + JSON.stringify(d, null, 2);
+    chip($('chipManual'), 'OK', 'ok');
+  } catch (e) {
+    $('mOut').value = '错误: ' + e.message;
+    chip($('chipManual'), '失败', 'err');
+  }
+};
+
+/* ============================ 实时事件分发 ============================ */
+let lastLiveText = '—';
+bus.on('live', (m) => {
+  const key = (m.type || '') + '/' + (m.subType || '');
+  const d = m.data || {};
+  switch (key) {
+    case 'ota/progress': {
+      dotOn('upgrade');
+      const p = Math.max(0, Math.min(100, Number(d.progress) || 0));
+      $('otaBar').style.width = p + '%';
+      $('otaHint').textContent = `升级中 ${p}%`;
+      chip($('chipOta'), '升级中 ' + p + '%', 'warn');
+      if (p >= 100) { $('ledOta').className = 'led ok'; toast('ok', '升级完成', '设备正在重启'); }
+      break;
+    }
+    case 'qso/progress': {
+      const p = Math.max(0, Math.min(100, Number(d.percent) || 0));
+      $('qsoBar').style.width = p + '%';
+      const stage = d.stage === 'adif' ? 'ADIF 导出' : d.stage === 'import' ? '恢复数据库' : '数据库备份';
+      $('qsoProgHint').textContent = `${stage} ${p}%` + (d.error ? ' · 失败' : '');
+      if (!d.error && p >= 100) {
+        const path = d.stage === 'adif' ? '/api/qso/adif' : '/api/qso/backup';
+        $('qsoDl').href = hostHttp() + path;
+        $('qsoDlRow').style.display = '';
+        toast('ok', stage + ' 完成', '可下载文件');
+      }
+      break;
+    }
+    case 'message/summary': {
+      const from = d.callsign || d.from || '未知';
+      toast('info', '新消息', from);
+      dotOn('msg');
+      loadMsg(false);
+      break;
+    }
+    case 'message/ack': {
+      chip($('chipAck'), d.isSuccess ? '送达' : '失败', d.isSuccess ? 'ok' : 'err');
+      toast(d.isSuccess ? 'ok' : 'err', d.isSuccess ? '消息已送达' : '消息发送失败', d.callsign || '');
+      break;
+    }
+    case 'qso/callsign': {
+      App.liveCall = d;
+      renderLivePanel();
+      if (d.isSpeaking) toast('info', '收到讲话', (d.callsign || '') + (d.crossServer ? ' · 跨服务器' : ''));
+      break;
+    }
+    case 'qso/history': {
+      App.history = Array.isArray(d) ? d : (d.list || []);
+      renderLivePanel();
+      toast('info', '讲话历史已更新', (App.history || []).length + ' 条');
+      break;
+    }
+    case 'station/import': {
+      const txt = importResultText(d.result);
+      chip($('chipImport'), txt, d.result === 0 ? 'ok' : 'err');
+      toast(d.result === 0 ? 'ok' : 'err', '导入结果（异步）', txt);
+      break;
+    }
+  }
+  lastLiveText = key;
+  renderLivePanel();
+});
+
+function renderLivePanel() {
+  const kv = $('kvLive');
+  if (!kv) return;
+  const c = App.liveCall || {};
+  const hist = (App.history || []).slice(0, 2).map((h) => `${h.callsign} ${fmtTime(h.utcTime)}`).join(' / ');
+  const liveOn = !!(Live.ws && Live.ws.readyState === 1);
+  renderKV(kv, [
+    ['状态', liveOn ? 'LIVE' : '未连接'],
+    ['收帧', Live.frames],
+    ['当前通联', c.callsign ? `${c.callsign}${c.grid ? ' · ' + c.grid : ''}${c.isSpeaking ? ' · 讲话中' : ''}` : '—'],
+    ['最近事件', lastLiveText],
+    ['讲话历史', hist || '—'],
+  ]);
+  chip($('chipLive'), liveOn ? 'LIVE' : '未连接', liveOn ? 'live' : '');
+}
+
+/* ============================ 首次进入自动加载 ============================ */
+const tabLoaded = new Set();
+const AUTO_LOAD = {
+  comms: () => { loadScrMode(); diagAll(); },
+  station: () => { loadStCurrent(); loadStList('getListRange'); },
+  qso: () => loadQso(),
+  msg: () => loadMsg(false),
+  events: () => loadEvents(20),
+  config: () => readAllCfg(),
+  wifi: () => loadWifiCurrent(),
+  upgrade: async () => { const busy = await upRuntime(); if (busy === false) upCheck(); },
+  log: null,
+};
+
+function autoLoad(name) {
+  const fn = AUTO_LOAD[name];
+  if (!fn || tabLoaded.has(name)) return;
+  if (!Link.isOpen()) return;           // 链路未就绪：等 bus 'open' 后再补
+  tabLoaded.add(name);
+  try {
+    Promise.resolve(fn()).catch((e) => { tabLoaded.delete(name); console.warn('[auto]', name, e); });
+  } catch (e) { tabLoaded.delete(name); }
+}
+
+/* ============================ 启动 ============================ */
+function connect() {
+  const host = ($('host').value || '').trim().replace(/^wss?:\/\//, '').replace(/\/.*$/, '');
+  if (!host) return toast('warn', '请填写设备地址', '例如 fmo.local 或 192.168.1.50');
+  App.host = host;
+  localStorage.setItem('fmo.host', host);
+  Link.connect(host);
+  Live.connect(host);
+}
+
+bus.on('open', () => {
+  chip($('chipLive'), 'LIVE', 'live');
+  // 主链路重连后，实时通道也要跟着恢复
+  if (!(Live.ws && Live.ws.readyState === 1)) Live.connect(App.host);
+  tabLoaded.clear();                    // 重连后各页重新自动加载一次
+  loadInfo();                           // 顶栏与本页共用的身份信息
+  renderLivePanel();
+  paintLink();
+  setTimeout(() => autoLoad(App.tab || 'comms'), 60);
+  setTimeout(pollEventsQuiet, 8000);    // 建立事件基线（之后每分钟比对一次）
+});
+bus.on('close', () => { paintLink(); Live.close(); });
+
+$('btnConn').onclick = connect;
+$('btnDisc').onclick = () => disconnectAll(true);
+$('btnTopAudio').onclick = () => {
+  if (typeof AudioCtl === 'undefined') return;
+  if (AudioCtl.ws) { AudioCtl.stop(); toast('info', '音频流已停止'); }
+  else { AudioCtl.start(); toast('info', '音频流连接中', '有声才推流'); }
+  setTimeout(paintTopAudio, 400);
+};
+
+/** 彻底拆链路：主通道 + 实时通道 + 音频流 + 排队请求，并把状态复位 */
+function disconnectAll(notify) {
+  try { if (typeof AudioCtl !== 'undefined') AudioCtl.stop(); } catch (e) { }
+  Link.disconnect();          // 内部置 manual=true，阻止自动重连
+  Live.close();
+  tabLoaded.clear();
+  try { paintTopAudio(); paintLive('idle'); renderLivePanel(); paintLink(); } catch (e) { }
+  chip($('chipAudio'), '待命', '');
+  $('ledAudio').className = 'led';
+  $('audioMeter').style.width = '0%';
+  const ev = $('tbEv');
+  if (ev) { ev.textContent = 'EV —'; ev.className = 'chip hide-sm'; }
+  if (notify) toast('warn', '已断开设备链路', '主通道 / 实时通道 / 音频流均已停止');
+}
+$('host').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
+
+(function boot() {
+  const saved = localStorage.getItem('fmo.host');
+  const legacy = '192.168.50.163';                 // 旧默认值，迁移到 fmo.local
+  $('host').value = (saved && saved !== legacy) ? saved : 'fmo.local';
+  App.tab = 'comms';                    // 默认页；链路就绪后会自动加载
+  buildConfig();
+  renderKV($('kvInfo'), [['状态', '连接后自动加载…']]);
+  renderKV($('kvWifiCur'), [['状态', '待命']]);
+  renderKV($('kvMsg'), [['状态', '尚未选择消息']]);
+  renderKV($('kvStCur'), [['状态', '待命']]);
+  renderKV($('kvDiag'), [['状态', '自动自检中…']]);
+  renderKV($('kvUp'), [['状态', '自动查询中…']]);
+  renderKV($('kvAudio'), [['状态', '未连接'], ['采样率', '8000 Hz']]);
+  renderKV($('kvLive'), [['状态', '未连接'], ['收帧', 0], ['当前通联', '—'], ['最近事件', '—']]);
+  chip($('chipLog'), '0 行');
+  const tick = () => {
+    const d = new Date();
+    $('fClock').textContent = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  };
+  tick(); setInterval(tick, 1000);
+  setInterval(renderLivePanel, 4000);
+  setInterval(pollEventsQuiet, 60000);   // 事件小点：每分钟安静比对一次
+  paintTopAudio();
+  paintLink();
+  setTimeout(connect, 250);
+})();
+
+
+
+</script>
+</body>
+</html>
