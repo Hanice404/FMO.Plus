@@ -1,5 +1,7 @@
 # FMO.Plus — 战术风 Web 控制台
 
+仓库：<https://github.com/Hanice404/FMO.Plus>
+
 一个单文件、零依赖的 Web 控制台，用于通过浏览器控制 **FMO**（业余无线电 APRS 台站控制器）。
 界面是军绿 CRT 战术终端风格；所有功能都直接跑在设备自带的 WebSocket 控制面上，**不需要改固件、不需要在设备上安装任何东西**。
 
