@@ -104,7 +104,8 @@ nav button{
   display:flex;align-items:center;gap:8px;width:100%;text-align:left;margin-bottom:4px;
   background:transparent;border:1px solid transparent;letter-spacing:1px;
 }
-nav button .ic{color:var(--fg-faint);flex:none;width:14px;text-align:center}
+nav button .ic{color:var(--fg-faint);flex:none;width:14px;display:inline-flex;align-items:center;justify-content:center}
+nav button .ic svg{display:block;width:13px;height:13px}
 nav button:hover .ic{color:var(--accent)}
 nav button.active{background:#16280f;border-color:var(--accent);color:#d8ffd0}
 nav button.active .ic{color:var(--accent);text-shadow:0 0 6px rgba(127,211,90,.6)}
@@ -378,7 +379,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
     <button data-tab="events" data-live="0" title="有新活动/公告时点亮"><span class="ic">✺</span><span class="lbl">事件</span><span class="dot"></span></button>
     <div class="grp">系统</div>
     <button data-tab="config"><span class="ic">⚙</span><span class="lbl">配置</span></button>
-    <button data-tab="wifi"><span class="ic">⌁</span><span class="lbl">无线</span></button>
+    <button data-tab="wifi"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M1.8 6.4a9 9 0 0 1 12.4 0"/><path d="M4.2 9a6 6 0 0 1 7.6 0"/><path d="M6.6 11.5a3 3 0 0 1 2.8 0"/><circle cx="8" cy="13.7" r="1" fill="currentColor" stroke="none"/></svg></span><span class="lbl">无线</span></button>
     <button data-tab="upgrade" data-live="0" title="升级进行中点亮"><span class="ic">⇅</span><span class="lbl">升级</span><span class="dot"></span></button>
     <button data-tab="log"><span class="ic">▤</span><span class="lbl">原始日志</span></button>
   </nav>
