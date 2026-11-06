@@ -129,6 +129,10 @@ main{flex:1 1 auto;overflow:auto;padding:14px;min-width:0}
   display:flex;align-items:center;gap:9px;white-space:nowrap;overflow:hidden;
 }
 .card>h3 .t{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis}
+/* 窄屏标题收一点字距，尽量完整显示「中文 // english」 */
+@media (max-width: 620px){
+  .card>h3{font-size:11.5px;letter-spacing:.6px;gap:7px;padding:7px 10px}
+}
 .card>h3 .chip{margin-left:auto}
 .card .body{padding:12px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;min-width:0}
@@ -289,12 +293,35 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
 .bear-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;pointer-events:none}
 .bear-center .bv{font-size:19px;font-weight:800;letter-spacing:-.5px;color:#d9ffd0;line-height:1.1}
 .bear-center .bk{font-size:10px;color:var(--fg-dim);letter-spacing:1px;line-height:1.2}
-.bear-info{flex:1 1 auto;min-width:0}
+.bear-info{flex:1 1 220px;min-width:0}
 @media (max-width:620px){
   .bear-wrap{flex-direction:column;align-items:stretch;gap:12px}
   .compass{margin:0 auto;width:216px;height:216px}
   .bear-center .bv{font-size:21px}
   .bear-center .bk{font-size:11px}
+}
+
+/* ---------- 电台页：按宽度自适应（音频 | 罗盘 并排，其余模块各自通栏） ----------
+   不再绑定 orientation，只要内容区够宽（≥680px）就左右并排，窄了自动回到单列。
+   必须带 .active，否则 ID 选择器会压过 .panel{display:none}，导致该页一直显示 */
+@media (min-width: 680px){
+  #p-station.active{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:14px;align-items:stretch}
+  #p-station.active>.card{margin-bottom:0;min-width:0}
+  /* DOM 顺序：1 音频 / 2 当前电台 / 3 罗盘 / 4 电台列表 / 5 导入报文 */
+  #p-station.active>.card:nth-child(1){order:1}                          /* 音频   ← 左 */
+  #p-station.active>.card:nth-child(3){order:2}                          /* 罗盘   → 右 */
+  #p-station.active>.card:nth-child(2){order:3;grid-column:1 / -1}       /* 当前电台：通栏 */
+  #p-station.active>.card:nth-child(4){order:4;grid-column:1 / -1}       /* 电台列表：通栏 */
+  #p-station.active>.card:nth-child(5){order:5;grid-column:1 / -1}       /* 导入报文：通栏 */
+  #p-station .bear-wrap{flex-wrap:wrap;justify-content:center}
+  #p-station .bear-info{flex:1 1 320px}
+  /* 宽屏下信息列标签窄一点，把宽度让给数值与按钮 */
+  #p-station .bear-info .kv{grid-template-columns:110px minmax(0,1fr)}
+  /* 罗盘与音频卡片等高：卡片纵向 flex，内容在剩余空间里居中 */
+  #p-station.active>.card:nth-child(3){display:flex;flex-direction:column}
+  #p-station.active>.card:nth-child(3)>.body{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center}
+  /* 通栏后当前电台的两列信息可以分左右排，避免一条很长 */
+  #p-station.active>.card:nth-child(2) .kv{grid-template-columns:140px minmax(0,1fr) 140px minmax(0,1fr)}
 }
 
 /* ---------- 响应式：平板 / 窄屏 ---------- */
@@ -401,7 +428,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
         </div>
 
         <div class="card">
-          <h3><span class="led" id="ledLive"></span><span class="t">实时通道 // /events</span><span class="chip" id="chipLive">未连接</span></h3>
+          <h3><span class="led" id="ledLive"></span><span class="t">实时通道 // ws://host/events</span><span class="chip" id="chipLive">未连接</span></h3>
           <div class="body">
             <dl class="kv" id="kvLive">
               <dt class="k">状态</dt><dd class="v">—</dd>
@@ -417,7 +444,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
         </div>
 
         <div class="card">
-          <h3><span class="t">屏幕模式 // ui</span><span class="chip" id="chipScr">—</span></h3>
+          <h3><span class="t">屏幕模式 // ui.getScreenMode</span><span class="chip" id="chipScr">—</span></h3>
           <div class="body">
             <div class="row">
               <label class="fld">模式</label>
@@ -430,7 +457,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
         </div>
 
         <div class="card">
-          <h3><span class="t">链路诊断</span><span class="chip" id="chipDiag">—</span></h3>
+          <h3><span class="t">链路诊断 // link.diag</span><span class="chip" id="chipDiag">—</span></h3>
           <div class="body">
             <dl class="kv" id="kvDiag"></dl>
             <div class="row" style="margin-top:9px">
@@ -510,7 +537,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
 
       <div class="grid2">
         <div class="card">
-          <h3><span class="t">完整性与备份</span></h3>
+          <h3><span class="t">完整性与备份 // qso.sign · backup · adif</span></h3>
           <div class="body">
             <div class="row">
               <button id="btnQsoSign" class="mini">生成签名</button>
@@ -530,7 +557,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
           </div>
         </div>
         <div class="card">
-          <h3><span class="t">签名 / 公钥输出</span><span class="chip" id="chipKey">—</span></h3>
+          <h3><span class="t">签名 / 公钥输出 // qso.getPublicKey</span><span class="chip" id="chipKey">—</span></h3>
           <div class="body">
             <textarea id="qsoKeyOut" rows="6" readonly placeholder="签名或公钥…"></textarea>
           </div>
@@ -559,7 +586,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
         </div>
 
         <div class="card">
-          <h3><span class="t">消息详情 / 发送</span><span class="chip" id="chipMsgDetail">—</span></h3>
+          <h3><span class="t">消息详情 / 发送 // message.getDetail · send</span><span class="chip" id="chipMsgDetail">—</span></h3>
           <div class="body">
             <dl class="kv" id="kvMsg"></dl>
             <div class="row" style="margin-top:9px">
@@ -609,7 +636,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
       </div>
 
       <div class="card">
-        <h3><span class="led" id="ledBear"></span><span class="t">方位罗盘 // bearing</span><span class="chip" id="chipBear">—</span></h3>
+        <h3><span class="led" id="ledBear"></span><span class="t">方位罗盘 // geo.bearing</span><span class="chip" id="chipBear">—</span></h3>
         <div class="body">
           <div class="bear-wrap">
             <div class="compass">
@@ -648,7 +675,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
       </div>
 
       <div class="card">
-        <h3><span class="t">电台列表</span>
+        <h3><span class="t">电台列表 // station.getListRange</span>
           <span class="chip" id="chipStList">—</span></h3>
         <div class="body">
           <div class="row">
@@ -708,7 +735,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
         </div>
 
         <div class="card">
-          <h3><span class="t">发布 / 黑名单</span><span class="chip" id="chipBlk">—</span></h3>
+          <h3><span class="t">发布 / 黑名单 // event.publish · blocked.*</span><span class="chip" id="chipBlk">—</span></h3>
           <div class="body">
             <div class="row">
               <label class="fld">主题</label><input id="evTopic" style="flex:1 1 auto;min-width:80px" maxlength="32" placeholder="≤32 字节">
@@ -771,7 +798,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
         </div>
 
         <div class="card">
-          <h3><span class="t">系统操作</span><span class="chip err">高危</span></h3>
+          <h3><span class="t">系统操作 // config.reboot · reset</span><span class="chip err">高危</span></h3>
           <div class="body">
             <dl class="kv">
               <dt class="k">重启系统</dt><dd class="v">设备重启，约 20–30 秒恢复</dd>
@@ -790,7 +817,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
     <!-- ============ 日志 ============ -->
     <section class="panel" id="p-log">
       <div class="card">
-        <h3><span class="t">原始协议日志</span><span class="chip" id="chipLog">0</span></h3>
+        <h3><span class="t">原始协议日志 // ws.trace</span><span class="chip" id="chipLog">0</span></h3>
         <div class="body">
           <div class="row">
             <input id="logFilter" placeholder="过滤 type（如 config / wifi / event）" style="width:230px">
@@ -803,7 +830,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
       </div>
 
       <div class="card">
-        <h3><span class="t">手动下发 // 原始请求</span><span class="chip" id="chipManual">—</span></h3>
+        <h3><span class="t">手动下发 // ws.request</span><span class="chip" id="chipManual">—</span></h3>
         <div class="body">
           <div class="row">
             <input id="mType" value="config" style="width:100px" placeholder="type">
@@ -937,17 +964,47 @@ const GEO = {
   },
 };
 
-/** 取本机坐标（config/getCordinate），结果缓存；失败返回 null */
+/**
+ * 取本机坐标（config/getCordinate）
+ * - 内存缓存 → localStorage 缓存（30 天）→ 直接问设备；问设备时最多重试 3 次（设备偶尔忙）
+ * - force=true 会跳过两级缓存，强制重新读取
+ * - 失败返回 null（部分固件未实现该命令）
+ */
 async function ensureMyPos(force) {
   if (App.myPos && !force) return App.myPos;
-  try {
-    const d = await Link.request('config', 'getCordinate');
-    if (typeof d.latitude === 'number' && typeof d.longitude === 'number' &&
-      isFinite(d.latitude) && isFinite(d.longitude) && (d.latitude || d.longitude)) {
-      App.myPos = { lat: d.latitude, lon: d.longitude };
-    }
-  } catch (e) { /* 静默：部分固件未实现该命令 */ }
+  if (!force) {
+    try {
+      const raw = localStorage.getItem('fmo.pos');
+      if (raw) {
+        const c = JSON.parse(raw);
+        if (c && isFinite(c.lat) && isFinite(c.lon) && (!c.at || Date.now() - c.at < 30 * 864e5)) {
+          App.myPos = { lat: c.lat, lon: c.lon };
+          return App.myPos;
+        }
+      }
+    } catch (e) { /* 缓存坏了就忽略 */ }
+  }
+  for (let i = 0; i < 3; i++) {
+    try {
+      const d = await Link.request('config', 'getCordinate');
+      if (typeof d.latitude === 'number' && typeof d.longitude === 'number' &&
+        isFinite(d.latitude) && isFinite(d.longitude) && (d.latitude || d.longitude)) {
+        App.myPos = { lat: d.latitude, lon: d.longitude };
+        try { localStorage.setItem('fmo.pos', JSON.stringify({ ...App.myPos, at: Date.now() })); } catch (e) { }
+        return App.myPos;
+      }
+    } catch (e) { /* 重试 */ }
+    if (i < 2) await sleep(300 + i * 500);
+  }
   return App.myPos || null;
+}
+
+/** 把本机位置填进罗盘的输入框（只在空的时候填，不覆盖用户输入） */
+function fillBearInputs(me) {
+  if (!me) return;
+  if (!$('bearGrid').value) $('bearGrid').value = GEO.latLonToGrid(me.lat, me.lon);
+  if (!$('bearLat').value) $('bearLat').value = me.lat.toFixed(5);
+  if (!$('bearLon').value) $('bearLon').value = me.lon.toFixed(5);
 }
 
 /* ------------------------------------------------------------ 提示 / 弹窗 */
@@ -1299,6 +1356,7 @@ function paintAudioUI() {
     btn.textContent = live ? '■ 停止 · LIVE' : (connecting ? '⋯ 连接中' : '▶ 连接');
     btn.title = live ? '音频流直播中，点击停止' : (connecting ? '正在建立音频连接…' : '点击连接音频流（有声才推流）');
   }
+  if (typeof scheduleDialFit === 'function') scheduleDialFit();   // 音频卡片高度变化后重算罗盘尺寸
 }
 
 /* ------------------------------------------------------------ KV 渲染 */
@@ -1940,11 +1998,45 @@ function pushLiveBearing() {
   return true;
 }
 
+/**
+ * 横屏两列时，罗盘直径跟随同一行「实时音频流」卡片的可用高度等比放大。
+ * 纯 CSS 无法表达（卡片高度本身受罗盘影响会自引用/死循环），所以用 JS 量参考卡片再设内联尺寸。
+ * 单列（手机）时清掉内联尺寸，交回 CSS 的 172 / 216px。
+ */
+let fitDialTimer = 0;
+function fitCompassDial() {
+  const panel = $('p-station');
+  if (!panel) return;
+  const comp = panel.querySelector('.compass');
+  const card = panel.querySelector('.card:nth-child(3)');
+  const audioBody = panel.querySelector('.card:nth-child(1) .body');
+  if (!comp || !card || !audioBody) return;
+  const wide = getComputedStyle(panel).display === 'grid';
+  if (!wide) { comp.style.width = ''; comp.style.height = ''; return; }
+  const h = audioBody.clientHeight;                    // 参考：音频卡片内容区高度
+  if (!h) return;
+  // 同时受卡片宽度约束：给右侧信息列留出至少 320px + 16px 间距，否则数值/按钮会被截断
+  const room = (card.clientWidth - 26) - 336;
+  const side = Math.max(172, Math.min(320, Math.round(h - 4), Math.round(room)));
+  comp.style.width = side + 'px';
+  comp.style.height = side + 'px';
+}
+function scheduleDialFit() {
+  clearTimeout(fitDialTimer);
+  fitDialTimer = setTimeout(fitCompassDial, 80);
+}
+window.addEventListener('resize', scheduleDialFit);
+window.addEventListener('orientationchange', scheduleDialFit);
+
 async function initBearing() {
   buildCompassTicks();
+  fitCompassDial();
+  if (!App.myPos) chip($('chipBear'), '定位中…', 'warn');
   const me = await ensureMyPos();
   if (!me) return paintBearingEmpty(null);
+  fillBearInputs(me);                    // 首次进入：自动定位并按本机位置填好输入框
   if (!pushLiveBearing()) renderBearing(null);
+  scheduleDialFit();
 }
 
 buildCompassTicks();
@@ -1955,18 +2047,25 @@ $('btnBearGo').onclick = async () => {
   const lat = parseFloat($('bearLat').value), lon = parseFloat($('bearLon').value);
   await ensureMyPos();
   if (!App.myPos) return toast('warn', '没有本机坐标', '到「配置 → 位置坐标」设置，或点「定位本机」');
+  let target = null, label = '';
   if (g) {
     const p = GEO.gridToLatLon(g);
     if (!p) return toast('warn', '网格不合法', '示例：OM89dx / OM89dw / PL09mu');
-    setBearFollow(false);          // 手动指定目标 → 自动退出跟随，免得被推送顶掉
-    return renderBearing(p, '网格 ' + p.grid);
-  }
-  if (isFinite(lat) && isFinite(lon)) {
+    if (p.grid.toUpperCase() === GEO.latLonToGrid(App.myPos.lat, App.myPos.lon).toUpperCase()) {
+      return toast('info', '这是本机所在的网格', '改成对方网格再算（如 OM78gb）');
+    }
+    target = p; label = '网格 ' + p.grid;
+  } else if (isFinite(lat) && isFinite(lon)) {
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return toast('warn', '经纬度超出范围');
-    setBearFollow(false);
-    return renderBearing({ lat, lon }, lat.toFixed(4) + ', ' + lon.toFixed(4));
+    target = { lat, lon }; label = lat.toFixed(4) + ', ' + lon.toFixed(4);
+  } else {
+    return toast('warn', '请填网格或经纬度');
   }
-  toast('warn', '请填网格或经纬度');
+  if (GEO.distance(App.myPos, target) < 0.05) {
+    return toast('info', '目标就是本机', '输入框当前是本机位置，改成对方网格或坐标再算');
+  }
+  setBearFollow(false);          // 手动指定目标 → 自动退出跟随，免得被推送顶掉
+  renderBearing(target, label);
 };
 $('btnBearMy').onclick = async () => {
   const me = await ensureMyPos(true);
@@ -2116,7 +2215,7 @@ $('btnBlkUnblock').onclick = async () => {
 /* ============================ 配置寄存器 ============================ */
 const CFG_GROUPS = [
   {
-    id: 'aprs', title: 'APRS 服务器', hint: '改动需重启 APRS 服务生效',
+    id: 'aprs', title: 'APRS 服务器 // config.getUrl · getPort', hint: '改动需重启 APRS 服务生效',
     fields: [
       {
         k: 'url', label: '服务器地址', get: 'getUrl', set: 'setUrl', type: 'text',
@@ -2159,7 +2258,7 @@ const CFG_GROUPS = [
     ],
   },
   {
-    id: 'server', title: '服务器身份', admin: true, hint: 'role ≥ 1 可见',
+    id: 'server', title: '服务器身份 // config.getServerName · getServerFilter', admin: true, hint: 'role ≥ 1 可见',
     fields: [
       {
         k: 'serverName', label: '服务器名称', get: 'getServerName', set: 'setServerName', type: 'text',
@@ -2186,7 +2285,7 @@ const CFG_GROUPS = [
     ],
   },
   {
-    id: 'phy', title: '台站物理参数', hint: '随信标广播',
+    id: 'phy', title: '台站物理参数 // config.getUserPhy*', hint: '随信标广播',
     fields: [
       { k: 'deviceName', label: '设备型号', get: 'getUserPhyDeviceName', set: 'setUserPhyDeviceName', type: 'text', val: (d) => d.deviceName, payload: (v) => ({ deviceName: v }) },
       {
@@ -2203,7 +2302,7 @@ const CFG_GROUPS = [
     ],
   },
   {
-    id: 'coord', title: '位置坐标', hint: '用于 APRS 信标',
+    id: 'coord', title: '位置坐标 // config.getCordinate', hint: '用于 APRS 信标',
     fields: [
       {
         k: 'lat', label: '纬度', get: 'getCordinate', set: 'setCordinate', type: 'text', pair: 'coord',
@@ -2220,7 +2319,7 @@ const CFG_GROUPS = [
     ],
   },
   {
-    id: 'misc', title: 'mDNS 与 QSO', hint: '',
+    id: 'misc', title: 'mDNS 与 QSO // config.getMdnsAliasHostname', hint: '',
     fields: [
       {
         k: 'hostname', label: 'mDNS 别名', get: 'getMdnsAliasHostname', set: 'setMdnsAliasHostname', type: 'text',
@@ -2238,7 +2337,7 @@ const CFG_GROUPS = [
     ],
   },
   {
-    id: 'black', title: '黑名单', admin: true, hint: '逗号分隔，仅大写字母/数字/空格',
+    id: 'black', title: '黑名单 // config.getBlacklist · getUserBlacklist', admin: true, hint: '逗号分隔，仅大写字母/数字/空格',
     fields: [
       {
         k: 'blacklist', label: '服务器黑名单', get: 'getBlacklist', set: 'setBlacklist', type: 'textarea',
@@ -2506,11 +2605,31 @@ const AudioCtl = {
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
   },
+  /**
+   * 由时域样本算 0–100 的电平。
+   * - 用 RMS 为主（70%）+ 峰值（30%），比单看频谱最大值稳定得多
+   * - dB 映射：-54 dB → 0%，0 dBFS 才到 100%（真实满刻度才顶格，语音一般落在 40–80%）
+   */
+  levelOf(td) {
+    let sum = 0, pk = 0;
+    for (let i = 0; i < td.length; i++) {
+      const v = (td[i] - 128) / 128;
+      sum += v * v;
+      const a = v < 0 ? -v : v;
+      if (a > pk) pk = a;
+    }
+    const rms = Math.sqrt(sum / (td.length || 1)) || 1e-7;
+    const db = (x) => 20 * Math.log10(Math.max(x, 1e-7));
+    const norm = (d) => Math.max(0, Math.min(1, (d + 54) / 54));
+    return Math.min(100, (norm(db(rms)) * 0.7 + norm(db(pk)) * 0.3) * 100);
+  },
   draw() {
     const cv = $('viz');
     const c = cv.getContext('2d');
     const bins = this.anal ? this.anal.frequencyBinCount : 0;
     const data = new Uint8Array(bins || 1);
+    const td = new Uint8Array(this.anal ? this.anal.fftSize : 1024);
+    this.meter = this.meter || 0;
     const loop = () => {
       if (!this.ctx) return;
       const W = cv.width, H = cv.height;
@@ -2523,9 +2642,14 @@ const AudioCtl = {
           c.fillStyle = `rgba(127,211,90,${0.25 + v * 0.7})`;
           c.fillRect(i * bw, H - v * H, Math.max(1, bw - 1), v * H);
         }
-        let peak = 0;
-        for (let i = 0; i < bins; i++) peak = Math.max(peak, data[i]);
-        $('audioMeter').style.width = Math.min(100, peak) + '%';
+        // 电平：攻击快、释放慢，避免一抖就满格
+        this.anal.getByteTimeDomainData(td);
+        const target = this.levelOf(td);
+        this.meter = target > this.meter
+          ? this.meter + (target - this.meter) * 0.45
+          : this.meter + (target - this.meter) * 0.08;
+        if (this.meter < 0.4) this.meter = 0;
+        $('audioMeter').style.width = this.meter.toFixed(1) + '%';
       }
       this.raf = requestAnimationFrame(loop);
     };
@@ -2592,6 +2716,7 @@ const AudioCtl = {
     chip($('chipAudio'), '待命', '');
     $('ledAudio').className = 'led';
     $('audioMeter').style.width = '0%';
+    this.meter = 0;
     this.paintAudio();
     paintAudioUI();
   },
@@ -2784,11 +2909,23 @@ function disconnectAll(notify) {
 }
 $('host').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
 
+/**
+ * 给所有模块标题补 title 提示（窄屏被省略号截断时，桌面悬停仍能看到全文）。
+ * 配置页分节标题是 buildConfig 动态生成的，所以启动后统一处理一次。
+ */
+function annotateCardTitles() {
+  document.querySelectorAll('.card > h3 .t').forEach((el) => {
+    const t = el.textContent.trim();
+    if (t) el.title = t;
+  });
+}
+
 (function boot() {
   // 地址记忆：没有保存过就用设备 mDNS 别名
   $('host').value = localStorage.getItem('fmo.host') || 'fmo.local';
   App.tab = 'comms';                    // 默认页；链路就绪后会自动加载
   buildConfig();
+  annotateCardTitles();
   renderKV($('kvInfo'), [['状态', '连接后自动加载…']]);
   renderKV($('kvWifiCur'), [['状态', '待命']]);
   renderKV($('kvMsg'), [['状态', '尚未选择消息']]);
