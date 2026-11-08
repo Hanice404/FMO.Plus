@@ -277,6 +277,26 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
 .meter{height:9px;background:var(--inset);border:1px solid var(--line);overflow:hidden}
 .meter>i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--ok),var(--accent) 70%,var(--amber))}
 
+/* ---------- 屏幕模式平铺选择 ---------- */
+.mode-tiles{display:flex;gap:8px;flex-wrap:wrap}
+.mode-tiles button{
+  flex:1 1 96px;min-width:0;padding:8px 10px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+  background:var(--inset);border:1px solid var(--line);color:var(--fg-dim);cursor:pointer;text-align:left;
+}
+.mode-tiles button b{font:700 15px/1 var(--mono);color:var(--fg);font-weight:700}
+.mode-tiles button span{font-size:12px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mode-tiles button:hover:not(.on):not(:disabled){border-color:var(--line-hi);color:var(--fg)}
+.mode-tiles button.on{border-color:var(--accent);background:#16280f;color:#d8ffd0;box-shadow:inset 0 0 0 1px rgba(127,211,90,.25)}
+.mode-tiles button.on b{color:var(--accent)}
+
+/* 电台列表：当前台站高亮 */
+#tblSt tbody tr.cur{background:rgba(127,211,90,.07)}
+#tblSt tbody tr.cur td{color:#d9ffd0}
+#tblSt tbody tr.sw{background:rgba(232,192,90,.06)}
+/* 「当前 / 切到 / 切换中」三种状态按钮同尺寸 */
+#tblSt tbody td:last-child button.mini{min-width:64px;text-align:center}
+#tblSt tbody button.mini.cur{color:var(--accent);border-color:var(--accent);opacity:1;cursor:default}
+
 /* ---------- 方位罗盘 ---------- */
 .bear-wrap{display:flex;gap:16px;align-items:center;min-width:0}
 .compass{position:relative;width:172px;height:172px;flex:none}
@@ -448,11 +468,15 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
           <div class="body">
             <div class="row">
               <label class="fld">模式</label>
-              <select id="scrMode"><option value="0">0 · 默认</option><option value="1">1</option><option value="2">2</option></select>
               <button id="btnScrGet" class="mini">读取</button>
-              <button id="btnScrSet" class="mini">设置</button>
+              <button id="btnScrSet" class="mini primary">设置</button>
             </div>
-            <div class="hint">ui.getScreenMode / ui.setScreenMode</div>
+            <div class="mode-tiles" id="scrTiles">
+              <button data-mode="0"><b>0</b><span>正常模式</span></button>
+              <button data-mode="1"><b>1</b><span>睡眠模式</span></button>
+              <button data-mode="2"><b>2</b><span>禅丶模式</span></button>
+            </div>
+            <div class="hint">ui.getScreenMode / ui.setScreenMode · 选好模式后点「设置」下发</div>
           </div>
         </div>
 
@@ -661,7 +685,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
                 <label class="fld">目标网格</label>
                 <input id="bearGrid" placeholder="OM89dx" style="width:94px" maxlength="8">
                 <button id="btnBearGo" class="mini primary">计算</button>
-                <button id="btnBearLive" class="mini primary" title="自动跟随正在讲话的台站">跟随通话</button>
+                <button id="btnBearLive" class="mini primary" title="自动跟随正在讲话的台站">跟随通话 · 开</button>
               </div>
               <div class="row">
                 <label class="fld">或经纬度</label>
@@ -1124,6 +1148,9 @@ const App = {
   myPos: null,          // 本机坐标 {lat, lon}
   liveCall: null,       // 最近一次 qso/callsign 推送 {callsign, grid}
   bearFollow: true,    // 罗盘默认跟随通话
+  currentUid: null,     // 当前台站 UID（电台列表高亮用）
+  switchUid: null,      // 正在切换的目标 UID（列表显示「切换中」）
+  scrMode: 0,           // 屏幕模式：0 正常 / 1 睡眠 / 2 禅丶
 };
 
 const Link = {
@@ -1418,20 +1445,34 @@ $('btnCopyCert').onclick = async () => {
   catch (e) { toast('err', '复制失败', e.message); }
 };
 
+/* 屏幕模式：平铺选择（0 正常 / 1 睡眠 / 2 禅丶） */
+const SCR_MODES = { 0: '正常模式', 1: '睡眠模式', 2: '禅丶模式' };
+App.scrMode = 0;
+function paintScrTiles() {
+  document.querySelectorAll('#scrTiles button').forEach((b) => {
+    b.classList.toggle('on', Number(b.dataset.mode) === App.scrMode);
+  });
+}
+document.querySelectorAll('#scrTiles button').forEach((b) => {
+  b.onclick = () => { App.scrMode = Number(b.dataset.mode); paintScrTiles(); };
+});
+paintScrTiles();
+
 async function loadScrMode() {
   try {
     const d = await Link.request('ui', 'getScreenMode');
-    $('scrMode').value = String(d.mode ?? 0);
-    chip($('chipScr'), 'mode ' + (d.mode ?? '—'), 'ok');
+    App.scrMode = Number(d.mode ?? 0);
+    paintScrTiles();
+    chip($('chipScr'), (SCR_MODES[App.scrMode] || 'mode ' + App.scrMode), 'ok');
   } catch (e) { chip($('chipScr'), '超时', 'warn'); }
 }
 $('btnScrGet').onclick = loadScrMode;
 $('btnScrSet').onclick = async () => {
-  const mode = parseInt($('scrMode').value, 10);
+  const mode = App.scrMode;
   try {
     await Link.request('ui', 'setScreenMode', { mode });
-    chip($('chipScr'), '已设置 ' + mode, 'ok');
-    toast('ok', '屏幕模式已下发', 'mode=' + mode);
+    chip($('chipScr'), SCR_MODES[mode] || 'mode ' + mode, 'ok');
+    toast('ok', '屏幕模式已下发', 'mode ' + mode + ' · ' + (SCR_MODES[mode] || ''));
   } catch (e) { chip($('chipScr'), '失败', 'err'); toast('err', '设置失败', e.message); }
 };
 
@@ -1851,8 +1892,17 @@ async function loadStCurrent() {
   chip($('chipStCur'), '…');
   try {
     const d = await Link.request('station', 'getCurrent');
+    // 刚切换过时设备可能仍回报旧台站：保护窗口内读数与之冲突就先不覆盖，稍后重读
+    const g = App.curGuard;
+    if (g && Number(g.uid) !== Number(d.uid) && Date.now() < g.until) {
+      chip($('chipStCur'), 'ACTIVE', 'ok');
+      setTimeout(loadStCurrent, 700);
+      return;
+    }
     chip($('chipStCur'), 'ACTIVE', 'ok');
+    App.currentUid = d.uid;
     renderKV($('kvStCur'), [['台站名称', d.name, 'strong'], ['UID', d.uid]]);
+    renderStList();                       // 列表里同步高亮当前台站
   } catch (e) { chip($('chipStCur'), '失败', 'err'); toast('err', '读取当前电台失败', e.message); }
 }
 
@@ -1864,12 +1914,21 @@ function renderStList() {
   $('btnStPrevPage').disabled = stState.start === 0;
   $('btnStNextPage').disabled = stState.atEnd;
   const tb = $('tblSt').querySelector('tbody');
-  tb.innerHTML = stState.list.length ? stState.list.map((s) => `
-      <tr class="clickable" data-uid="${s.uid}">
+  tb.innerHTML = stState.list.length ? stState.list.map((s) => {
+    const cur = App.currentUid != null && Number(App.currentUid) === Number(s.uid);
+    const sw = App.switchUid != null && Number(App.switchUid) === Number(s.uid);
+    const cell = sw
+      ? '<button class="mini warn" disabled>切换中</button>'
+      : cur
+        ? '<button class="mini cur" disabled>当前</button>'
+        : `<button class="mini" data-setuid="${s.uid}">切到</button>`;
+    return `
+      <tr class="clickable${cur ? ' cur' : ''}${sw ? ' sw' : ''}" data-uid="${s.uid}">
         <td class="num">${s.uid}</td>
         <td title="${esc(s.name)}">${esc(s.name || '')}</td>
-        <td><button class="mini" data-setuid="${s.uid}">切到</button></td>
-      </tr>`).join('') : '<tr><td colspan="3" class="hint">没有数据</td></tr>';
+        <td>${cell}</td>
+      </tr>`;
+  }).join('') : '<tr><td colspan="3" class="hint">没有数据</td></tr>';
 }
 
 async function fetchStPage() {
@@ -2076,13 +2135,14 @@ $('btnBearMy').onclick = async () => {
   renderBearing(null);
   toast('ok', '本机坐标已更新', me.lat.toFixed(5) + ', ' + me.lon.toFixed(5));
 };
-/** 同步「跟随通话」按钮外观 */
+/** 同步「跟随通话」按钮外观（开/关文案，样式与颜色沿用原来的 primary 切换） */
 function setBearFollow(on) {
   App.bearFollow = !!on;
   const b = $('btnBearLive');
   if (!b) return;
   b.classList.toggle('primary', App.bearFollow);
-  b.title = App.bearFollow ? '跟随中 · 点击关闭' : '点击开启跟随';
+  b.textContent = '跟随通话 · ' + (App.bearFollow ? '开' : '关');
+  b.title = App.bearFollow ? '跟随中 · 点击关闭' : '已关闭 · 点击开启跟随';
 }
 
 $('btnBearLive').onclick = () => {
@@ -2097,12 +2157,45 @@ $('tblSt').addEventListener('click', async (ev) => {
   const tr = ev.target.closest('tr[data-uid]');
   const uid = b ? Number(b.dataset.setuid) : (tr ? Number(tr.dataset.uid) : null);
   if (uid == null) return;
-  try {
-    const d = await Link.request('station', 'setCurrent', { uid });
-    if (d.result === 0) { toast('ok', '已切换电台', 'uid ' + uid); loadStCurrent(); }
-    else toast('err', '切换失败', 'result=' + d.result);
-  } catch (e) { toast('err', '切换失败', e.message); }
+  if (App.currentUid != null && Number(App.currentUid) === uid) return;   // 已经是当前台站
+  if (App.switchUid != null) return toast('info', '正在切换', '等当前这次切换完成');
+  await switchStation(uid, tr);
 });
+
+/**
+ * 切换当前台站：进入「切换中」状态并自动重试，直到设备确认为止（不需要再点第二次）
+ * 失败（重试用尽）才退回「切到」并提示。
+ */
+async function switchStation(uid, tr) {
+  const nameCell = tr ? tr.querySelector('td[title]') : null;
+  const rowName = nameCell ? nameCell.getAttribute('title') : ('uid ' + uid);
+  App.switchUid = uid;
+  renderStList();                                   // 该行按钮变「切换中」
+  chip($('chipStCur'), '切换中', 'warn');
+  let ok = false, lastErr = '';
+  for (let i = 0; i < 3 && !ok; i++) {               // 最多 3 次，期间一直显示「切换中」
+    try {
+      const d = await Link.request('station', 'setCurrent', { uid });
+      if (d.result === 0) { ok = true; break; }
+      lastErr = 'result=' + d.result;
+      if (d.result != null) break;                   // 设备明确拒绝就不再重试
+    } catch (e) { lastErr = e.message; }
+    if (i < 2) await sleep(600 + i * 400);
+  }
+  App.switchUid = null;
+  if (ok) {
+    App.currentUid = uid;
+    App.curGuard = { uid, until: Date.now() + 3500 };   // 保护窗口：回读若仍报旧值不覆盖 UI
+    renderStList();                                  // 变成「当前」
+    toast('ok', '已切换电台', rowName);
+    loadStCurrent();                                 // 以设备回读为准
+  } else {
+    renderStList();                                  // 退回「切到」
+    chip($('chipStCur'), '切换失败', 'err');
+    toast('err', '切换失败', lastErr || '未知原因');
+    loadStCurrent();
+  }
+}
 
 $('btnStImport').onclick = async () => {
   const rawPacket = ($('stRaw').value || '').trim();
@@ -2577,8 +2670,11 @@ const AudioCtl = {
   paintAudio() {
     const waited = this.startedAt ? Math.round((Date.now() - this.startedAt) / 1000) : 0;
     const live = !!this.ws;
+    const st = live
+      ? (this.frames > 0 ? '接收中' : '等待音频 ' + waited + 's（无活动通联时不推流）')
+      : (this.frames > 0 ? '已停止' : '未连接');
     renderKV($('kvAudio'), [
-      ['状态', this.frames > 0 ? '接收中' : (live ? '等待音频 ' + waited + 's（无活动通联时不推流）' : '未连接')],
+      ['状态', st],
       ['采样率', this.SR + ' Hz'],
       ['已收帧', this.frames],
       ['累计时长', (this.samples / this.SR).toFixed(1) + ' s'],
@@ -2659,6 +2755,8 @@ const AudioCtl = {
     this.ensure();
     if (this.ctx.state === 'suspended') { try { await this.ctx.resume(); } catch (e) { } }
     if (this.ws) return;
+    this.frames = 0; this.samples = 0;      // 每次新建连接从 0 开始计数
+    this.paintAudio();
     const url = 'ws://' + (App.host || $('host').value.trim()) + '/audio';
     chip($('chipAudio'), '连接中', 'warn');
     $('ledAudio').className = 'led warn';
@@ -2903,6 +3001,7 @@ function disconnectAll(notify) {
   chip($('chipAudio'), '待命', '');
   $('ledAudio').className = 'led';
   $('audioMeter').style.width = '0%';
+  try { if (typeof AudioCtl !== 'undefined') AudioCtl.paintAudio(); } catch (e) { }   // 断开后仍保留 已收帧/累计时长/缓冲队列
   const ev = $('tbEv');
   if (ev) { ev.textContent = 'EV —'; ev.className = 'chip hide-sm'; }
   if (notify) toast('warn', '已断开设备链路', '主通道 / 实时通道 / 音频流均已停止');
@@ -2932,7 +3031,7 @@ function annotateCardTitles() {
   renderKV($('kvStCur'), [['状态', '待命']]);
   renderKV($('kvDiag'), [['状态', '自动自检中…']]);
   renderKV($('kvUp'), [['状态', '自动查询中…']]);
-  renderKV($('kvAudio'), [['状态', '未连接'], ['采样率', '8000 Hz']]);
+  AudioCtl.paintAudio();               // 未连接时也展示 已收帧 / 累计时长 / 缓冲队列
   renderKV($('kvLive'), [['状态', '未连接'], ['收帧', 0], ['当前通联', '—'], ['最近事件', '—']]);
   chip($('chipLog'), '0 行');
   const tick = () => {
