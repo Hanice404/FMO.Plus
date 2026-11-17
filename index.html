@@ -295,7 +295,20 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
 #tblSt tbody tr.sw{background:rgba(232,192,90,.06)}
 /* 「当前 / 切到 / 切换中」三种状态按钮同尺寸 */
 #tblSt tbody td:last-child button.mini{min-width:64px;text-align:center}
+#tblSt tbody td:last-child{text-align:right}
 #tblSt tbody button.mini.cur{color:var(--accent);border-color:var(--accent);opacity:1;cursor:default}
+/* 表头右侧搜索框：固定列宽，保证占位文字完整显示 */
+#tblSt{table-layout:fixed}
+#tblSt thead th:first-child{width:76px}
+#tblSt thead th.th-tools{width:208px;padding:0 6px;text-align:right}
+#tblSt thead th.th-tools input{width:100%;height:24px;padding:2px 8px;font-size:12px}
+#tblSt td,#tblSt th{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tblSt tbody tr.hit td{color:#d9ffd0}
+@media (max-width: 620px){
+  #tblSt thead th:first-child{width:62px}
+  #tblSt thead th.th-tools{width:132px;padding:0 4px}
+  #tblSt thead th.th-tools input{font-size:11px;padding:2px 5px}
+}
 
 /* ---------- 方位罗盘 ---------- */
 .bear-wrap{display:flex;gap:16px;align-items:center;min-width:0}
@@ -718,7 +731,11 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
           </div>
           <div class="tblwrap" style="max-height:320px">
             <table id="tblSt">
-              <thead><tr><th style="width:76px">UID</th><th>名称</th><th style="width:96px"></th></tr></thead>
+              <thead><tr>
+                <th>UID</th>
+                <th>名称</th>
+                <th class="th-tools"><input id="stSearch" placeholder="搜索 UID / 名称" autocomplete="off" spellcheck="false" title="输入 UID 或台站名称，回车立即搜索"></th>
+              </tr></thead>
               <tbody><tr><td colspan="3" class="hint">尚未加载</td></tr></tbody>
             </table>
           </div>
@@ -1202,7 +1219,7 @@ const EP = {
 
 const Link = {
   ws: null, state: 'idle', queue: [], inflight: null,
-  lastLat: null, lastCode: undefined, retryDelay: 1000, manual: false,
+  lastLat: null, lastCode: undefined, retryDelay: 1000, manual: false, watchdog: null,
 
   isOpen() { return this.ws && this.ws.readyState === 1; },
 
@@ -1217,13 +1234,26 @@ const Link = {
     try { ws = new WebSocket(url); }
     catch (e) { this.state = 'error'; paintLink(); toast('err', '地址无效', String(e.message || e)); return; }
     this.ws = ws;
+    // 握手看门狗：4s 没握手就重建（防止 socket 半开时永远卡在 CONNECT…）
+    clearTimeout(this.watchdog);
+    this.watchdog = setTimeout(() => {
+      if (this.ws !== ws || ws.readyState === 1 || this.manual) return;
+      LOG.add('er', '[watchdog] 4s 未完成握手，重建连接');
+      try { ws.onclose = null; ws.close(); } catch (e) { }
+      if (this.ws === ws) this.ws = null;
+      this.state = 'closed';
+      paintLink();
+      setTimeout(() => { if (!this.isOpen() && !this.manual) this.connect(this.host); }, 300);
+    }, 4000);
     ws.onopen = () => {
       this.state = 'open'; this.retryDelay = 1000;
+      clearTimeout(this.watchdog);
       LOG.add('sy', `[open] ${url}`);
       paintLink(); bus.emit('open');
       this._pump();
     };
     ws.onclose = () => {
+      clearTimeout(this.watchdog);
       this.state = 'closed';
       this._fail('链路断开');
       paintLink(); bus.emit('close');
@@ -1938,7 +1968,7 @@ $('btnMsgDel').onclick = () => {
 /* ============================ 电台 ============================ */
 // 设备侧 station/getListRange：count≤20 全偏移稳定；24 在 start=48 会返回空包（实测），故上限取 20
 const ST_MAX = 20;
-const stState = { kind: 'getListRange', start: 0, count: 20, list: [], atEnd: false, lastGoodStart: 0 };
+const stState = { kind: 'getListRange', start: 0, count: 20, list: [], atEnd: false, lastGoodStart: 0, search: null };
 const stLabels = { getListRange: '全部', getPinnedList: '收藏', getActiveList: '活跃' };
 
 async function loadStCurrent() {
@@ -1960,14 +1990,20 @@ async function loadStCurrent() {
 }
 
 function renderStList() {
-  const page = Math.floor(stState.start / stState.count) + 1;
-  $('stPage').textContent = page;
-  const tail = stState.atEnd ? ' · 已到末尾' : '';
-  chip($('chipStList'), `${stLabels[stState.kind]} · 本页 ${stState.list.length} 条${tail}`, stState.atEnd ? 'warn' : 'ok');
-  $('btnStPrevPage').disabled = stState.start === 0;
-  $('btnStNextPage').disabled = stState.atEnd;
+  const searching = !!(stState.search && stState.search.term);
+  const rows = searching ? stState.search.hits : stState.list;
+  $('stPage').textContent = searching ? '—' : (Math.floor(stState.start / stState.count) + 1);
+  if (searching) {
+    chip($('chipStList'), `${stLabels[stState.kind]} · 搜索「${stState.search.term}」${rows.length} 条 / 共 ${stState.search.total}`,
+      rows.length ? 'ok' : 'warn');
+  } else {
+    const tail = stState.atEnd ? ' · 已到末尾' : '';
+    chip($('chipStList'), `${stLabels[stState.kind]} · 本页 ${rows.length} 条${tail}`, stState.atEnd ? 'warn' : 'ok');
+  }
+  $('btnStPrevPage').disabled = searching || stState.start === 0;
+  $('btnStNextPage').disabled = searching || stState.atEnd;
   const tb = $('tblSt').querySelector('tbody');
-  tb.innerHTML = stState.list.length ? stState.list.map((s) => {
+  tb.innerHTML = rows.length ? rows.map((s) => {
     const cur = App.currentUid != null && Number(App.currentUid) === Number(s.uid);
     const sw = App.switchUid != null && Number(App.switchUid) === Number(s.uid);
     const cell = sw
@@ -1976,12 +2012,12 @@ function renderStList() {
         ? '<button class="mini cur" disabled>当前</button>'
         : `<button class="mini" data-setuid="${s.uid}">切到</button>`;
     return `
-      <tr class="clickable${cur ? ' cur' : ''}${sw ? ' sw' : ''}" data-uid="${s.uid}">
+      <tr class="clickable${cur ? ' cur' : ''}${sw ? ' sw' : ''}${searching ? ' hit' : ''}" data-uid="${s.uid}">
         <td class="num">${s.uid}</td>
         <td title="${esc(s.name)}">${esc(s.name || '')}</td>
         <td>${cell}</td>
       </tr>`;
-  }).join('') : '<tr><td colspan="3" class="hint">没有数据</td></tr>';
+  }).join('') : `<tr><td colspan="3" class="hint">${searching ? '没有匹配的台站' : '没有数据'}</td></tr>`;
 }
 
 async function fetchStPage() {
@@ -1991,7 +2027,8 @@ async function fetchStPage() {
 }
 
 async function loadStList(kind) {
-  if (kind) { stState.kind = kind; stState.start = 0; stState.atEnd = false; stState.lastGoodStart = 0; }
+  if (kind) { stState.kind = kind; stState.start = 0; stState.atEnd = false; stState.lastGoodStart = 0; stSearch.cache = null; }
+  stState.search = null;                  // 走普通分页时退出搜索展示（输入框由调用方处理）
   chip($('chipStList'), stLabels[stState.kind] + ' · 读取中', 'warn');
   try {
     let list = await fetchStPage();
@@ -2025,7 +2062,19 @@ $('btnStNext').onclick = async () => {
   try { const d = await Link.request('station', 'next'); toast(d.result === 0 ? 'ok' : 'err', '下一个台站', 'result=' + d.result); loadStCurrent(); }
   catch (e) { toast('err', '失败', e.message); }
 };
-document.querySelectorAll('[data-stlist]').forEach((b) => { b.onclick = () => loadStList(b.dataset.stlist); });
+document.querySelectorAll('[data-stlist]').forEach((b) => {
+  b.onclick = () => {
+    const kind = b.dataset.stlist;
+    stSearch.cache = null;                       // 换视图即作废整库缓存
+    if (stSearch.term) {                         // 搜索中切换视图：在新视图里继续搜
+      stState.kind = kind;
+      stState.start = 0;
+      stState.atEnd = false;
+      return applyStationSearch(stSearch.term);
+    }
+    loadStList(kind);
+  };
+});
 $('btnStPrevPage').onclick = () => {
   if (stState.start === 0) return toast('info', '已经是第一页');
   stState.start = Math.max(0, stState.start - stState.count);
@@ -2043,8 +2092,72 @@ $('stPageSize').onchange = (ev) => {
   stState.start = 0;
   stState.atEnd = false;
   stState.lastGoodStart = 0;
+  // 改每页条数时退出搜索，回到普通分页
+  if (stSearch.term) { $('stSearch').value = ''; stSearch.term = ''; stState.search = null; }
   loadStList();
 };
+
+/* --------- 电台搜索（UID / 名称）：整库扫描后本地过滤 --------- */
+const stSearch = { term: '', seq: 0, cache: null };
+const ST_SEARCH_MAX = 400;     // 安全上限，避免异常固件无限翻页
+
+function stMatch(s, term) {
+  const t = String(term || '').trim().toLowerCase();
+  if (!t) return true;
+  return String(s.uid).includes(t) || String(s.name || '').toLowerCase().includes(t);
+}
+
+/** 把当前视图（全部/收藏/活跃）整库拉一遍，按 kind 缓存 60s */
+async function collectStations(kind, onProgress) {
+  const c = stSearch.cache;
+  if (c && c.kind === kind && Date.now() - c.at < 60000) return c.list;
+  const expect = kind === 'getListRange' ? 'getListResponse' : kind + 'Response';
+  const all = [];
+  for (let start = 0; start < ST_SEARCH_MAX; start += ST_MAX) {
+    const d = await Link.request('station', kind, { start, count: ST_MAX }, { expect, timeout: 6000 });
+    const list = d.list || [];
+    all.push(...list);
+    if (onProgress) onProgress(all.length);
+    if (list.length < ST_MAX) break;      // 短页即最后一页
+  }
+  stSearch.cache = { kind, list: all, at: Date.now() };
+  return all;
+}
+
+async function applyStationSearch(rawTerm) {
+  const term = String(rawTerm == null ? $('stSearch').value : rawTerm).trim();
+  stSearch.term = term;
+  if (!term) {                            // 清空 → 回到普通分页
+    stState.search = null;
+    await loadStList();
+    return;
+  }
+  const seq = ++stSearch.seq;
+  chip($('chipStList'), '搜索中…', 'warn');
+  try {
+    const all = await collectStations(stState.kind, (n) => {
+      if (seq === stSearch.seq) chip($('chipStList'), `扫描 ${n} 条…`, 'warn');
+    });
+    if (seq !== stSearch.seq) return;     // 被更新的一次搜索取代
+    const hits = all.filter((s) => stMatch(s, term));
+    stState.search = { term, hits, total: all.length };
+    renderStList();
+  } catch (e) {
+    if (seq !== stSearch.seq) return;
+    chip($('chipStList'), '搜索失败', 'err');
+    toast('err', '搜索失败', e.message);
+  }
+}
+
+let stSearchTimer = 0;
+$('stSearch').addEventListener('input', () => {
+  clearTimeout(stSearchTimer);
+  stSearchTimer = setTimeout(() => applyStationSearch($('stSearch').value), 350);
+});
+$('stSearch').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { clearTimeout(stSearchTimer); applyStationSearch($('stSearch').value); }
+  else if (e.key === 'Escape') { clearTimeout(stSearchTimer); $('stSearch').value = ''; applyStationSearch(''); }
+});
 
 /* --------- 方位罗盘 --------- */
 function buildCompassTicks() {
