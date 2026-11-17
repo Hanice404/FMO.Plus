@@ -411,7 +411,7 @@ canvas#viz{width:100%;height:120px;display:block;border:1px solid var(--line);ba
     <span class="chip hide-sm" id="tbEv" title="实时通道收帧数">EV —</span>
   </span>
   <button id="btnTopAudio" title="音频流开关"><span class="mic"></span><span class="lbl">音频</span></button>
-  <input id="host" placeholder="fmo.local" autocomplete="off" spellcheck="false">
+  <input id="host" placeholder="fmo.local" autocomplete="off" spellcheck="false" title="填主机名/IP 即可（协议自动判定）；也可写 wss://域名 强制安全连接">
   <button id="btnConn" class="primary">连接</button>
   <button id="btnDisc" class="danger">断开</button>
 </header>
@@ -1151,6 +1151,53 @@ const App = {
   currentUid: null,     // 当前台站 UID（电台列表高亮用）
   switchUid: null,      // 正在切换的目标 UID（列表显示「切换中」）
   scrMode: 0,           // 屏幕模式：0 正常 / 1 睡眠 / 2 禅丶
+  secure: false,        // 当前链路是否 wss/https（跟随页面或地址里显式指定）
+  secureExplicit: false,// 地址里是否手写了协议
+  probeTried: false,    // 是否已尝试过另一种协议
+  probeTimer: null,
+  failHinted: false,
+  everOpened: false,
+};
+
+/* ------------------------------------------------------------ 端点与协议自适应
+   目标：地址栏只填主机名/IP，协议自动跟随页面（https→wss，http/file→ws）；
+   也接受手写 wss:// / ws:// / https:// 覆盖；结果按主机记忆，避免每次探测。 */
+const EP = {
+  pageSecure() { return location.protocol === 'https:'; },
+  /** 解析输入：允许带协议与路径，返回 { host, scheme: 'ws'|'wss'|null } */
+  parse(raw) {
+    let v = String(raw == null ? '' : raw).trim();
+    let scheme = null;
+    const m = v.match(/^(wss?|https?):\/\//i);
+    if (m) {
+      const s = m[1].toLowerCase();
+      scheme = (s === 'wss' || s === 'https') ? 'wss' : 'ws';
+      v = v.slice(m[0].length);
+    }
+    v = v.replace(/\/.*$/, '').trim();
+    return { host: v, scheme };
+  },
+  /** 是否像局域网/直连地址（用于 https 页面下的报错提示） */
+  isLan(h) {
+    const host = String(h || '').toLowerCase();
+    if (!host) return false;
+    if (host === 'localhost' || host.endsWith('.local')) return true;
+    if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host)) return true;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+    return /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  },
+  saved(host) {
+    try {
+      const e = JSON.parse(localStorage.getItem('fmo.ep') || 'null');
+      if (e && e.host === host && typeof e.secure === 'boolean') return e.secure;
+    } catch (err) { }
+    return null;
+  },
+  remember(host, secure) {
+    try { localStorage.setItem('fmo.ep', JSON.stringify({ host, secure, at: Date.now() })); } catch (err) { }
+  },
+  ws(host, secure, path) { return (secure ? 'wss://' : 'ws://') + host + (path || ''); },
+  http(host, secure, path) { return (secure ? 'https://' : 'http://') + host + (path || ''); },
 };
 
 const Link = {
@@ -1166,12 +1213,13 @@ const Link = {
     this.state = 'connecting';
     paintLink();
     let ws;
-    try { ws = new WebSocket('ws://' + host + '/ws'); }
+    const url = EP.ws(host, !!App.secure, '/ws');
+    try { ws = new WebSocket(url); }
     catch (e) { this.state = 'error'; paintLink(); toast('err', '地址无效', String(e.message || e)); return; }
     this.ws = ws;
     ws.onopen = () => {
       this.state = 'open'; this.retryDelay = 1000;
-      LOG.add('sy', `[open] ${host}`);
+      LOG.add('sy', `[open] ${url}`);
       paintLink(); bus.emit('open');
       this._pump();
     };
@@ -1283,7 +1331,7 @@ const Live = {
   connect(host) {
     this.close(true);
     let ws;
-    try { ws = new WebSocket('ws://' + host + '/events'); } catch (e) { return; }
+    try { ws = new WebSocket(EP.ws(host, !!App.secure, '/events')); } catch (e) { return; }
     this.ws = ws;
     ws.onopen = () => {
       this.retry = 0;
@@ -1341,7 +1389,7 @@ function paintLink() {
   }
   $('btnConn').classList.toggle('primary', !Link.isOpen());
   $('btnConn').disabled = Link.state === 'connecting';
-  if (Link.isOpen() && App.host) txt.title = App.host;
+  if (Link.isOpen() && App.host) txt.title = (App.secure ? 'wss://' : 'ws://') + App.host;
   else txt.title = chipText;
 }
 function paintQueue() {
@@ -1774,7 +1822,12 @@ $('btnQsoClear').onclick = () => confirmWord('清空全部通联', '不可撤销
 });
 
 /* 备份 / ADIF：隐藏表单 POST + /events 进度 + 下载 */
-function hostHttp() { return 'http://' + (App.host || $('host').value.trim()); }
+function hostHttp() {
+  const parsed = EP.parse($('host').value);
+  const host = App.host || parsed.host;
+  const secure = App.host ? !!App.secure : resolveSecure(parsed);
+  return EP.http(host, secure, '');
+}
 function qsoHttp(path, label) {
   let fr = $('fmoPostFrame');
   if (!fr) { fr = document.createElement('iframe'); fr.id = 'fmoPostFrame'; fr.name = 'fmoPostFrame'; fr.style.display = 'none'; document.body.appendChild(fr); }
@@ -2757,7 +2810,10 @@ const AudioCtl = {
     if (this.ws) return;
     this.frames = 0; this.samples = 0;      // 每次新建连接从 0 开始计数
     this.paintAudio();
-    const url = 'ws://' + (App.host || $('host').value.trim()) + '/audio';
+    const audioParsed = EP.parse($('host').value);
+    const audioHost = App.host || audioParsed.host;
+    const audioSecure = App.host ? !!App.secure : resolveSecure(audioParsed);
+    const url = EP.ws(audioHost, audioSecure, '/audio');
     chip($('chipAudio'), '连接中', 'warn');
     $('ledAudio').className = 'led warn';
     paintAudioUI();
@@ -2960,17 +3016,79 @@ function autoLoad(name) {
 }
 
 /* ============================ 启动 ============================ */
+/** 决定协议：显式写了 wss/ws 就照用；否则用记忆值；再否则跟随页面协议 */
+function resolveSecure(parsed) {
+  if (parsed.scheme === 'wss') return true;
+  if (parsed.scheme === 'ws') return false;
+  const saved = EP.saved(parsed.host);
+  if (saved != null) return saved;
+  return EP.pageSecure();
+}
+
+/** 连不上时给一条能照着做的提示（不刷屏，只提示一次） */
+function explainLinkFailure() {
+  if (App.failHinted) return;
+  const host = App.host || '';
+  const secure = !!App.secure;
+  const pageSecure = EP.pageSecure();
+  let title = '', msg = '';
+  if (pageSecure && EP.isLan(host) && !secure) {
+    title = '此页面是 https，设备只支持 ws://';
+    msg = '请用本地 http 打开（node serve.mjs），或配置 wss 反向代理后填代理域名';
+  } else if (pageSecure && EP.isLan(host) && secure) {
+    title = 'wss 握手失败';
+    msg = '局域网设备通常没有证书；请改用 http 打开本页，或给设备配置带证书的反代';
+  } else if (secure) {
+    title = 'wss 连接失败';
+    msg = '证书可能不受信任，或对端没有提供 wss 服务';
+  } else {
+    title = '设备不可达';
+    msg = '检查 IP / 端口 / mDNS 解析，以及是否与设备在同一网络';
+  }
+  App.failHinted = true;
+  toast('err', title, msg, 9000);
+}
+
+function startLink() {
+  Link.connect(App.host);
+  Live.connect(App.host);
+  clearTimeout(App.probeTimer);
+  // 协议兜底：非 https 页面下若 ws 握不上，试一次 wss（反之已记忆则不试）
+  const canProbe = !App.secureExplicit && !EP.pageSecure() && !App.probeTried;
+  if (!canProbe) {
+    setTimeout(() => { if (!Link.isOpen()) explainLinkFailure(); }, 4000);
+    return;
+  }
+  App.probeTimer = setTimeout(() => {
+    if (Link.isOpen() || Link.manual || App.secureExplicit) return;
+    App.probeTried = true;
+    const from = App.secure ? 'wss' : 'ws';
+    App.secure = !App.secure;
+    LOG.add('sy', `[probe] ${from} 未握手，改用 ${App.secure ? 'wss' : 'ws'}:// 重试`);
+    toast('info', '正在尝试另一种协议', App.secure ? 'wss://' : 'ws://');
+    startLink();
+    setTimeout(() => { if (!Link.isOpen()) explainLinkFailure(); }, 4500);
+  }, 2600);
+}
+
 function connect() {
-  const host = ($('host').value || '').trim().replace(/^wss?:\/\//, '').replace(/\/.*$/, '');
-  if (!host) return toast('warn', '请填写设备地址', '例如 fmo.local 或 192.168.1.50');
-  App.host = host;
-  localStorage.setItem('fmo.host', host);
-  Link.connect(host);
-  Live.connect(host);
+  const parsed = EP.parse($('host').value);
+  if (!parsed.host) return toast('warn', '请填写设备地址', '例如 fmo.local 或 192.168.1.50');
+  App.host = parsed.host;
+  App.secure = resolveSecure(parsed);
+  App.secureExplicit = parsed.scheme != null;
+  App.probeTried = false;
+  App.failHinted = false;
+  localStorage.setItem('fmo.host', ($('host').value || '').trim());
+  LOG.add('sy', `[link] ${EP.ws(App.host, App.secure, '')}  (${App.secureExplicit ? '地址里指定' : '自动判定'})`);
+  startLink();
 }
 
 bus.on('open', () => {
   chip($('chipLive'), 'LIVE', 'live');
+  App.everOpened = true;
+  EP.remember(App.host, !!App.secure);       // 握手成功即记住该主机的协议
+  App.failHinted = false;
   // 主链路重连后，实时通道也要跟着恢复
   if (!(Live.ws && Live.ws.readyState === 1)) Live.connect(App.host);
   tabLoaded.clear();                    // 重连后各页重新自动加载一次
@@ -2980,7 +3098,12 @@ bus.on('open', () => {
   setTimeout(() => autoLoad(App.tab || 'comms'), 60);
   setTimeout(pollEventsQuiet, 8000);    // 建立事件基线（之后每分钟比对一次）
 });
-bus.on('close', () => { paintLink(); Live.close(); });
+bus.on('close', () => {
+  paintLink();
+  Live.close();
+  // 一次都没连上过 → 给可执行的原因提示（只提示一次）
+  if (!App.everOpened) setTimeout(explainLinkFailure, 400);
+});
 
 $('btnConn').onclick = connect;
 $('btnDisc').onclick = () => disconnectAll(true);
